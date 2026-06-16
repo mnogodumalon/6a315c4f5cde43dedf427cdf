@@ -10,7 +10,6 @@ import { useState, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { StatCard } from '@/components/StatCard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import {
   RecordOverlay,
@@ -140,11 +139,6 @@ export default function DashboardOverview() {
     return m;
   }, [enrichedAnmeldungen]);
 
-  const totalTeilnehmer = useMemo(() =>
-    enrichedAnmeldungen.reduce((sum, a) => sum + (a.fields.anzahl_personen ?? 1), 0),
-    [enrichedAnmeldungen]
-  );
-
   // Handlers
   const handleCreateVeranstaltung = async (fields: Veranstaltungen['fields']) => {
     await LivingAppsService.createVeranstaltungenEntry(fields);
@@ -203,13 +197,6 @@ export default function DashboardOverview() {
   if (loading) return <DashboardSkeleton />;
   if (error) return <DashboardError error={error} onRetry={fetchAll} />;
 
-  const veranstaltungenMitFristHeute = enrichedVeranstaltungen.filter(v => {
-    if (!v.fields.anmeldefrist) return false;
-    const frist = new Date(v.fields.anmeldefrist);
-    frist.setHours(23, 59, 59);
-    return frist >= today;
-  });
-
   return (
     <div className="space-y-6">
       {/* Workflow-Navigation */}
@@ -228,34 +215,6 @@ export default function DashboardOverview() {
           <IconChevronRight size={18} className="text-muted-foreground shrink-0" />
         </a>
       </div>
-      {/* KPI-Zeile */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
-          title="Veranstaltungen"
-          value={String(veranstaltungen.length)}
-          description="Gesamt"
-          icon={<IconCalendar size={18} className="text-muted-foreground" />}
-        />
-        <StatCard
-          title="Bevorstehend"
-          value={String(upcomingVeranstaltungen.length)}
-          description="Ab heute"
-          icon={<IconClock size={18} className="text-muted-foreground" />}
-        />
-        <StatCard
-          title="Anmeldungen"
-          value={String(anmeldungen.length)}
-          description={`${totalTeilnehmer} Personen`}
-          icon={<IconUsers size={18} className="text-muted-foreground" />}
-        />
-        <StatCard
-          title="Veranstalter"
-          value={String(veranstalter.length)}
-          description={`${veranstaltungenMitFristHeute.length} offene Fristen`}
-          icon={<IconBuildingStore size={18} className="text-muted-foreground" />}
-        />
-      </div>
-
       {/* Haupt-Tabs */}
       <div className="flex flex-wrap gap-2 items-center border-b border-border pb-0">
         {(['upcoming', 'all', 'veranstalter'] as TabView[]).map(tab => (
@@ -875,9 +834,6 @@ type Anmeldungen = import('@/types/app').Anmeldungen;
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
-      </div>
       <div className="flex gap-2">
         {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-32 rounded-full" />)}
       </div>

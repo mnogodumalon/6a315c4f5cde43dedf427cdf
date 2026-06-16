@@ -1,274 +1,96 @@
 /**
- * RecordView — pre-generated record-detail widget set.
+ * RecordView — pre-generated record-detail widget set (Archetype A).
  *
- * The whole detail-view UX (route pages, drawers, modals, lightboxes) ships
- * as composable primitives in this file. Compose; never reimplement.
+ * The whole detail-view UX (route pages, drawers, modals, lightboxes) ships as
+ * composable primitives here. You feed records into compound components; the
+ * file owns the shells, the layout, the overlay stack. Compose; never
+ * reimplement. Building a custom <Dialog>/<Sheet>/<Drawer> or a
+ * `<div className="fixed inset-0">` modal for record details is forbidden —
+ * THIS file is the detail surface. Customize via slots, never by editing it.
  *
- * ─── HARD RULES (read these first — they are easy to forget) ───────────
- *
+ * ─── HARD RULES (read first) ───────────────────────────────────────────
  *  1. EVERY detail surface MUST include <RecordAttachments appId recordId/>.
  *     Leave it out and the record's files/notes silently disappear.
  *  2. NEVER fork the shell: no custom <Dialog>/<Sheet>/<Drawer>/`fixed
  *     inset-0` for record details. Compose <RecordView>/<RecordOverlay>.
- *  3. In <RecordOverlay>, NEVER navigate away from a <RecordRelation> —
- *     push onto the overlay stack (see useRecordOverlayStack) instead.
- *  4. Zoom belongs on a DETAIL surface (the overlay's `media` slot): use
- *     <MediaThumbnail> there, never a raw <img> the user can't enlarge.
- *     But a clickable list/gallery TILE is ONE click target → it opens the
- *     <RecordOverlay>; its image is a passive `<img className="object-cover">`.
- *     Never nest a <MediaThumbnail> inside a clickable tile — two click
- *     targets fight (tile-open vs. its own lightbox).
- *  5. Never edit this file. Missing slot = Generator bug, report it.
+ *  3. In <RecordOverlay>, NEVER navigate away from a <RecordRelation> — push
+ *     onto the overlay stack (useRecordOverlayStack) instead. The user opened
+ *     a preview; don't rip them out.
+ *  4. Zoom belongs on a DETAIL surface (an overlay/header `media` slot): use
+ *     <MediaThumbnail> there, never a raw <img> the user can't enlarge. A
+ *     clickable list/gallery TILE is ONE click target — it opens the overlay;
+ *     its image is a passive `<img className="object-cover">`.
+ *  5. Never edit this file. If a slot is missing: unblock via children/render-
+ *     prop + // TODO(widget-gap). Never fork, never leave the build red.
  *
  * ─── API at a glance (exact prop / return names — NEVER guess) ─────────
  *
- *  useRecordOverlayStack<T>() ->
- *    { top, current, stack, open, canGoBack, push, pop, close, replace }
- *    `current` is an alias of `top` (the visible item). push/pop drill the
- *    stack; replace opens from outside the overlay; close empties it.
- *    T is UNCONSTRAINED — for ONE entity just use its record type:
- *    `useRecordOverlayStack<EnrichedBild>()`, then `replace(bild)` / read
- *    `top`. Only a MULTI-type stack needs a `{ type, id }` union (see below).
+ *  useRecordOverlayStack<T = RecordOverlayStackItem>(initial?: T[]) ->
+ *    { stack: T[], top: T|null, current: T|null, open: boolean,
+ *      canGoBack: boolean, push(item), pop(), close(), replace(item) }
+ *    `current` aliases `top` (the visible item). push/pop drill the stack;
+ *    replace opens from outside the overlay; close empties it. T is
+ *    UNCONSTRAINED — for ONE entity use its record type
+ *    (`useRecordOverlayStack<Buchung>()`, then `replace(b)` / read `top`); a
+ *    MULTI-type stack uses a `{ type, id }` union (see the example).
  *
- *  <RecordView        onBack? onEdit? editLabel? backLabel? aside? className?>
- *  <RecordOverlay     open onClose onEdit? onBack? placement?('side'|'center')
- *                     size?('sm'|'md'|'lg'|'xl') media? footer? counter?
- *                     onPrev? onNext? ariaLabel? closeOnBackdropClick?
- *                     onBeforeClose? editLabel? closeLabel? backLabel? className?>
+ *  <RecordView        onBack? onEdit? editLabel? backLabel? aside? className?
+ *                     children>
+ *  <RecordOverlay     open onClose onEdit? onBack?
+ *                     placement?: 'side'|'center'   (default 'side')
+ *                     size?: 'sm'|'md'|'lg'|'xl'    (default 'md')
+ *                     media? footer? counter? onPrev? onNext? ariaLabel?
+ *                     closeOnBackdropClick?(default true) onBeforeClose?
+ *                     editLabel? closeLabel? backLabel? prevLabel? nextLabel?
+ *                     className? children>
  *  <RecordHeader      title subtitle? media? badges? meta? actions? className?>
- *  <RecordKeyFacts    items={[{label, value, icon?}]} className?>
- *  <RecordSection     title? icon? cols?(1|2|3) className?>
- *  <RecordField       label value? format? emphasis? hideEmpty? empty?
- *                     className? children?>
- *      format: text|longtext|date|datetime|currency|bool|email|url|pill
+ *  <RecordKeyFacts    items: { label, value, icon? }[]   className?>
+ *  <RecordSection     title? icon? cols?: 1|2|3 (default 1)  className? children>
+ *  <RecordField       label value? format? empty?(default '—') emphasis?
+ *                     hideEmpty? className? children?>
+ *      format: 'text'|'longtext'|'date'|'datetime'|'currency'|'bool'|'email'|'url'|'pill'
+ *               (default 'text')
  *  <RecordRelation    label? name meta? icon? href? onClick? className?>
- *  <RecordTimeline    items renderItem? empty? className?>
+ *  <RecordTimeline    items: { id?, when?, who?, text, icon?, actions? }[]
+ *                     renderItem?(item, index) empty? className?>
  *  <RecordAttachments appId recordId readOnly?>
  *  <RecordViewSkeleton/>
- *  <RecordViewEmpty   title? description? action? icon? className?/>
+ *  <RecordViewEmpty   icon? title? description? action? className?/>
  *  <RecordViewError   error onRetry? title? retryLabel? className?/>
  *
- *  NB: every `icon` prop is a COMPONENT reference — pass `icon={IconAlbum}`,
- *  NOT `icon={<IconAlbum/>}`. (The `media` slots, by contrast, take a rendered
- *  element: `media={<img …/>}`.)
+ *  Every `icon` prop is a COMPONENT reference — `icon={IconBed}`, NOT
+ *  `icon={<IconBed/>}`. The `media` slots take a RENDERED element instead:
+ *  `media={<img …/>}`.
  *
- * ─── When to use ──────────────────────────────────────────────────────
+ *  `format="pill"` reads `.label` off a {key,label} lookup object. For an
+ *  APPLOOKUP, pass the resolved display name (an inline helper that maps the
+ *  stored URL → label by id; see the example), not the raw field. For
+ *  anything the formats don't cover (progress bar, map, rating) pass
+ *  `children` instead of `value` — they render under the label; `value`/
+ *  `format` are then ignored.
  *
- * Anywhere your UI shows the details of ONE record — image preview, kanban
- * card click, calendar event tap, profile page, custom workflow surface —
- * use the components from this file. Building a custom <Dialog>, <Sheet>,
- * <Drawer>, or `<div className="fixed inset-0">` modal for record details
- * is forbidden. Customization happens via the slots, never by replacing
- * the shell.
+ *  <RecordOverlay> paging vs. stack — distinct: `onPrev`/`onNext` (+`counter`,
+ *  ←/→ keys) STEP THROUGH SIBLING records (a gallery); the overlay stack
+ *  DRILLS INTO RELATED records. Don't conflate them.
  *
- * ─── Two surfaces, one composition ────────────────────────────────────
+ * ─── ❌ COMMON MISTAKES (real build failures) ──────────────────────────
+ *  ❌ <RecordHeader media> / overlay `media` with a raw <img> the user can't
+ *     enlarge → use <MediaThumbnail> for a zoomable detail asset.
+ *  ❌ Nesting <MediaThumbnail> inside a clickable tile → two click targets
+ *     fight (tile-open vs. its own lightbox). Tiles use a passive <img>.
+ *  ❌ navigate() from a <RecordRelation> inside a <RecordOverlay> → use
+ *     overlay.push(); navigation only on a <RecordView> route page.
+ *  ❌ icon={<IconBed/>} → pass the component: icon={IconBed}.
+ *  ❌ badges={[{ label: '…' }]} — `badges`/`meta`/`actions` are ReactNode SLOTS
+ *     (TS2322): pass RENDERED elements, e.g. badges={<Badge>…</Badge>}. Only
+ *     <RecordKeyFacts items> and <RecordTimeline items> take config arrays.
+ *  ❌ Forgetting <RecordAttachments> → files/notes silently vanish.
+ *  ❌ A hand-rolled `fixed inset-0` modal for details → compose <RecordOverlay>.
  *
- * 1) ROUTE (full-page detail at /<entity>/:id)
- *    Pre-generated as {Entity}DetailPage.tsx. Click a list row → navigate.
- *    Wrap your composition in <RecordView>.
+ * Full compiling example: ./RecordView.example.tsx
  *
- *      <RecordView onBack={...} onEdit={...} aside={<Sidebar />}>
- *        <RecordHeader title="..." />
- *        <RecordSection title="..." cols={2}>
- *          <RecordField label="..." value={...} format="date" />
- *        </RecordSection>
- *        <RecordAttachments appId={...} recordId={...} />
- *      </RecordView>
- *
- * 2) OVERLAY (in-page preview, no navigation away)
- *    Use when the user shouldn't lose the dashboard context.
- *
- *      <RecordOverlay
- *        open onClose onEdit
- *        placement="side"     // 'side' (right-sheet) | 'center' (modal)
- *        size="md"            // 'sm' | 'md' | 'lg' | 'xl'  (max-width on sm+)
- *        media={<img/>}       // optional big-asset slot (gallery layout)
- *        footer={<Button>…</Button>}   // optional sticky bottom bar (won't scroll)
- *      >
- *        ...same composition...
- *      </RecordOverlay>
- *
- * ─── Compound components ──────────────────────────────────────────────
- *
- *  <RecordHeader title subtitle? media? badges? meta? actions? className?>
- *    All slots optional except `title`. Pass `media` for a 2-column header
- *    with the asset on the left. For a zoomable image/file in `media`, use
- *    `<MediaThumbnail src={url} />` from '@/components/widgets/MediaViewer'
- *    (click → full-screen zoom) instead of a raw `<img>` — a raw `<img>` is
- *    a dead end, the user cannot enlarge it.
- *
- *  <RecordKeyFacts items={[{label, value, icon?}]}>
- *    Prominent strip of the 2–4 MOST important values, placed right under
- *    <RecordHeader> (a total, a status, a due date). At-a-glance hierarchy;
- *    everything else goes in the <RecordSection> grid. Keep it to 2–4.
- *
- *  <RecordSection title? icon? cols={1|2|3} className?>
- *    Grid of fields. `className="md:col-span-2"` on a child spans the row
- *    (typical for `format="longtext"`). `className` on the Section itself
- *    augments the card (e.g. span an aside grid, tweak spacing).
- *
- *  <RecordField label value? format? className? children? emphasis? hideEmpty?>
- *    Formats: `text | longtext | date | datetime | currency | bool | email
- *    | url | pill`. Use `pill` for lookup/select|radio values (reads
- *    `.label` off the {key,label} object). For applookups, pass the
- *    helper output: `value={getXyzDisplayName(record.fields.feld)}`.
- *    For anything the formats don't cover (progress bar, map, rating),
- *    pass `children` instead of `value` — they render as-is under the label.
- *    `emphasis` renders a KEY value large/bold (use sparingly — 1–3 fields).
- *    `hideEmpty` drops the field entirely when empty, so optional/sparse
- *    fields don't pile up as a wall of "—".
- *
- *  <RecordRelation label name meta? icon? href? onClick? className?>
- *    Tappable card for a related record. In a <RecordView> route page,
- *    `onClick={() => navigate('/...')}` is fine. In a <RecordOverlay>,
- *    push onto the stack instead (see Overlay Stack below) — never
- *    navigate from inside an overlay; the user opened a preview, don't
- *    rip them out.
- *
- *  <RecordTimeline items={[{id?, when?, who?, text, icon?, actions?}]} renderItem? className?>
- *    Flat array — comments, activity, status changes. Add `actions` to an
- *    item for a right-aligned button in the default layout. For a fully
- *    custom item, pass `renderItem={(it, i) => <…/>}` — you own the markup,
- *    the widget only supplies the <li> wrapper.
- *
- *  <RecordAttachments appId recordId readOnly?>
- *    File / note / url / json attachments. Drop into every detail surface —
- *    without it, attachment functionality silently disappears.
- *
- *  <RecordViewSkeleton />                                    // loading
- *  <RecordViewEmpty   title? description? action? icon? />   // not found
- *  <RecordViewError   error onRetry? />                      // failure
- *
- * ─── Overlay Stack (relations don't navigate, they push) ──────────────
- *
- * Clicking <RecordRelation> in an overlay should dive into the related
- * record without leaving the overlay. The `useRecordOverlayStack<T>()`
- * hook manages the stack.
- *
- *    type Item = { type: 'buchung' | 'kunde' | 'katze'; id: string };
- *    const overlay = useRecordOverlayStack<Item>();
- *
- *    // Open from a list row:
- *    <button onClick={() => overlay.replace({ type: 'buchung', id: b.record_id })}>
- *
- *    // Render — one shell, branches by type:
- *    <RecordOverlay
- *      open={overlay.open}
- *      onClose={overlay.close}
- *      onBack={overlay.canGoBack ? overlay.pop : undefined}
- *    >
- *      {overlay.top?.type === 'buchung' && <BuchungContent push={overlay.push} />}
- *      {overlay.top?.type === 'kunde'   && <KundeContent   push={overlay.push} />}
- *    </RecordOverlay>
- *
- *    // In BuchungContent — relation pushes the next layer:
- *    <RecordRelation
- *      label="Kunde" name={kundeName}
- *      onClick={() => push({ type: 'kunde', id: kundeId })}
- *    />
- *
- * ─── Recipes — match your entity to the closest archetype ─────────────
- *
- * A) Person / Contact   (Mitarbeiter, Kunden, Mitglieder, Teilnehmer)
- *    Signal: name + contact (email/phone) + optional photo. No workflow.
- *
- *      <RecordOverlay open onClose onEdit ariaLabel="Person">
- *        <RecordHeader
- *          title={`${r.fields.vorname ?? ''} ${r.fields.nachname ?? ''}`.trim()}
- *          subtitle={r.fields.position ?? r.fields.abteilung?.label}
- *          meta={r.fields.email && <a href={`mailto:${r.fields.email}`}>{r.fields.email}</a>}
- *        />
- *        <RecordSection title="Kontakt" cols={2}>
- *          <RecordField label="E-Mail"  value={r.fields.email}   format="email" />
- *          <RecordField label="Telefon" value={r.fields.telefon} format="text"  />
- *        </RecordSection>
- *        <RecordAttachments appId={APP_IDS.X} recordId={r.record_id} />
- *      </RecordOverlay>
- *
- * B) Issue / Ticket / Task
- *    Signal: title + status + priority + reporter + body + comments.
- *
- *      <RecordOverlay open onClose onEdit ariaLabel="Ticket">
- *        <RecordHeader
- *          title={r.fields.titel}
- *          badges={<>
- *            <Badge>{r.fields.status?.label}</Badge>
- *            <Badge variant="outline">{r.fields.prioritaet?.label}</Badge>
- *          </>}
- *          meta={<>Reporter: {r.fields.reporter} · {formatDate(r.fields.erstellt)}</>}
- *        />
- *        <RecordSection title="Beschreibung">
- *          <RecordField label="" value={r.fields.beschreibung} format="longtext" />
- *        </RecordSection>
- *        <RecordSection title="Kommentare">
- *          <RecordTimeline items={kommentare.map(k => ({
- *            id: k.record_id, who: k.fields.autor,
- *            when: formatDate(k.fields.datum), text: k.fields.text,
- *          }))} />
- *        </RecordSection>
- *        <RecordAttachments appId={APP_IDS.TICKETS} recordId={r.record_id} />
- *      </RecordOverlay>
- *
- * C) Media Asset   (Bild, Foto, PDF, Video, Dokument) — `media` is mandatory!
- *    Signal: a file/* field IS the content. Without `media` the asset disappears.
- *
- *      <RecordOverlay
- *        open onClose onEdit
- *        placement="center" size="xl"
- *        media={r.fields.bilddatei && (
- *          <img src={r.fields.bilddatei} alt={r.fields.bildtitel ?? ''}
- *               className="w-full h-full object-contain" />
- *        )}
- *        ariaLabel="Bild"
- *      >
- *        <RecordHeader
- *          title={r.fields.bildtitel ?? 'Ohne Titel'}
- *          subtitle={r.albumName}
- *          badges={<>
- *            {r.fields.veroeffentlicht && <Badge>Live</Badge>}
- *            {r.fields.lizenz && <Badge variant="secondary">{r.fields.lizenz.label}</Badge>}
- *          </>}
- *          meta={<>{formatDate(r.fields.aufnahmedatum)}{r.fields.kameramodell && ` · ${r.fields.kameramodell}`}</>}
- *        />
- *        <RecordSection title="Beschreibung">
- *          <RecordField label="" value={r.fields.bildbeschreibung} format="longtext" />
- *        </RecordSection>
- *        <RecordSection title="Bewertungen">
- *          <RecordTimeline items={...} />
- *        </RecordSection>
- *        <RecordAttachments appId={APP_IDS.BILDER} recordId={r.record_id} />
- *      </RecordOverlay>
- *
- * D) Booking / Reservation / Event
- *    Signal: date-range + 1-3 applookup relations + status workflow.
- *    Use the Overlay-Stack pattern above so relations drill down without
- *    leaving the overlay (Buchung → Kunde → his bookings → another Katze).
- *
- * E) Article / Document / Note   (Markdown body, aside metadata)
- *    Use <RecordView aside={...}> as a full-page route:
- *
- *      <RecordView onBack onEdit
- *        aside={<>
- *          <RecordSection title="Meta" cols={1}>
- *            <RecordField label="Autor"          value={r.fields.autor}            format="text" />
- *            <RecordField label="Veröffentlicht" value={r.fields.veroeffentlicht_am} format="date" />
- *          </RecordSection>
- *          <RecordAttachments .../>
- *        </>}
- *      >
- *        <RecordHeader title={r.fields.titel} subtitle={r.fields.untertitel} />
- *        <RecordSection>
- *          <RecordField label="" value={r.fields.inhalt} format="longtext" />
- *        </RecordSection>
- *      </RecordView>
- *
- * ─── Don't see your entity? ───────────────────────────────────────────
- *
- * Pick the closest archetype and adapt. Hard rules either way:
- *  • Always include <RecordAttachments>.
- *  • Always pass `media` for file/*-dominant entities.
- *  • In <RecordOverlay>, never navigate from a relation — use the stack.
- *  • Never edit this file. Missing slot = Generator bug, report it.
+ * @version 1.0.0
+ * @since 2026-06-03
  */
 import { type ReactNode, type ComponentType, useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -368,7 +190,7 @@ export function RecordViewSkeleton() {
 }
 
 type RecordViewEmptyProps = {
-  icon?: ComponentType<{ size?: number; className?: string; stroke?: number }>;
+  icon?: ComponentType<{ size?: number | string; className?: string; stroke?: number | string }>;
   title?: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
@@ -455,7 +277,7 @@ export function RecordHeader({ title, subtitle, media, badges, meta, actions, cl
 
 type RecordSectionProps = {
   title?: ReactNode;
-  icon?: ComponentType<{ size?: number; className?: string; stroke?: number }>;
+  icon?: ComponentType<{ size?: number | string; className?: string; stroke?: number | string }>;
   cols?: 1 | 2 | 3;
   /**
    * Extra classes for the outer `<section>` card — e.g. `md:col-span-2` to
@@ -575,7 +397,7 @@ function renderFieldValue(value: unknown, format: RecordFieldFormat, empty: stri
 export type RecordKeyFact = {
   label: ReactNode;
   value: ReactNode;
-  icon?: ComponentType<{ size?: number; className?: string; stroke?: number }>;
+  icon?: ComponentType<{ size?: number | string; className?: string; stroke?: number | string }>;
 };
 
 type RecordKeyFactsProps = {
@@ -614,7 +436,7 @@ type RecordRelationProps = {
   label?: ReactNode;
   name: ReactNode;
   meta?: ReactNode;
-  icon?: ComponentType<{ size?: number; className?: string; stroke?: number }>;
+  icon?: ComponentType<{ size?: number | string; className?: string; stroke?: number | string }>;
   href?: string;
   onClick?: () => void;
   className?: string;
@@ -651,7 +473,7 @@ export type RecordTimelineItem = {
   when?: ReactNode;
   who?: ReactNode;
   text: ReactNode;
-  icon?: ComponentType<{ size?: number; className?: string; stroke?: number }>;
+  icon?: ComponentType<{ size?: number | string; className?: string; stroke?: number | string }>;
   /** Optional right-aligned actions for the default item layout (e.g. a button). */
   actions?: ReactNode;
 };

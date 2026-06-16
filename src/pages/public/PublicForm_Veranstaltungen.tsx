@@ -59,8 +59,38 @@ export default function PublicFormVeranstaltungen() {
   const [error, setError] = useState<string | null>(null);
   const captchaRef = useRef<HTMLElement | null>(null);
   const [locating, setLocating] = useState(false);
-  const [geoFromPhoto, setGeoFromPhoto] = useState(false);
   const [showCoords, setShowCoords] = useState(false);
+  const [geoFromPhoto, setGeoFromPhoto] = useState(false);
+  const geoDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  async function reverseGeocode(lat: number, lng: number): Promise<string> {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+      const data = await res.json();
+      return data.display_name ?? '';
+    } catch { return ''; }
+  }
+
+  async function geoLocate(fieldKey: string) {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const info = await reverseGeocode(latitude, longitude);
+      setFields(f => ({ ...f, [fieldKey]: { lat: latitude, long: longitude, info } as any }));
+      setGeoFromPhoto(false);
+      setLocating(false);
+    }, () => { setLocating(false); });
+  }
+
+  function handleMapMove(fieldKey: string, lat: number, lng: number) {
+    setFields(f => ({ ...f, [fieldKey]: { ...((f as any)[fieldKey] ?? {}), lat, long: lng } }));
+    clearTimeout(geoDebounceRef.current);
+    geoDebounceRef.current = setTimeout(async () => {
+      const info = await reverseGeocode(lat, lng);
+      setFields(f => ({ ...f, [fieldKey]: { ...((f as any)[fieldKey] ?? {}), info } }));
+    }, 600);
+  }
 
   // Load the ALTCHA web component script once per page.
   useEffect(() => {
@@ -80,22 +110,6 @@ export default function PublicFormVeranstaltungen() {
     params.forEach((value, key) => { prefill[key] = value; });
     if (Object.keys(prefill).length) setFields(prev => ({ ...prefill, ...prev }));
   }, []);
-
-  async function geoLocate(fieldKey: string) {
-    if (!navigator.geolocation) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        setFields(f => ({ ...f, [fieldKey]: { lat: pos.coords.latitude, long: pos.coords.longitude, info: '' } }));
-        setLocating(false);
-      },
-      () => setLocating(false)
-    );
-  }
-
-  function handleMapMove(fieldKey: string, lat: number, lng: number) {
-    setFields(f => ({ ...f, [fieldKey]: { ...(f[fieldKey] ?? {}), lat, long: lng } }));
-  }
 
   function readCaptchaToken(): string | null {
     const el = captchaRef.current as any;

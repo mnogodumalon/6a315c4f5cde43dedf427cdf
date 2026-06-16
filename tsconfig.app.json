@@ -1,4 +1,12 @@
 {
+  // OVERRIDES the base-react-template tsconfig.app.json: a verbatim copy of the
+  // template's config plus the "exclude" at the bottom. The <Widget>.example.tsx
+  // files are wired to the FROZEN hotel contract fixture, not to this app's
+  // schema — they are READ-ONLY reference for the agent and MUST stay out of the
+  // app's compile graph, or `tsc -b` breaks on every non-hotel schema
+  // (TS2305/TS2339). Keep the compilerOptions in sync with the base template
+  // until the exclude lands in the E2B image itself (see WIDGET-ARCHITECTURE-V2
+  // §8 / M1b).
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "target": "ES2022",
@@ -31,5 +39,8 @@
       ]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/components/widgets/*.example.tsx"
+  ]
 }

@@ -21,26 +21,6 @@ export interface AttachmentInput {
   active?: boolean;
 }
 
-export interface Veranstalter {
-  record_id: string;
-  createdat: string;
-  updatedat: string | null;
-  fields: {
-    organisation_name?: string;
-    organisation_typ?: LookupValue;
-    ansprechpartner_vorname?: string;
-    ansprechpartner_nachname?: string;
-    email?: string;
-    telefon?: string;
-    strasse?: string;
-    hausnummer?: string;
-    plz?: string;
-    ort?: string;
-    website?: string;
-    beschreibung?: string;
-  };
-}
-
 export interface Veranstaltungen {
   record_id: string;
   createdat: string;
@@ -81,37 +61,43 @@ export interface Anmeldungen {
   };
 }
 
+export interface Veranstalter {
+  record_id: string;
+  createdat: string;
+  updatedat: string | null;
+  fields: {
+    organisation_name?: string;
+    organisation_typ?: LookupValue;
+    ansprechpartner_vorname?: string;
+    ansprechpartner_nachname?: string;
+    email?: string;
+    telefon?: string;
+    strasse?: string;
+    hausnummer?: string;
+    plz?: string;
+    ort?: string;
+    website?: string;
+    beschreibung?: string;
+  };
+}
+
 export const APP_IDS = {
-  VERANSTALTER: '6a315b1e3b0ba0a7a2d28905',
   VERANSTALTUNGEN: '6a315b225049324bae74cc15',
   ANMELDUNGEN: '6a315b23fe1f8743a7f9aaff',
+  VERANSTALTER: '6a315b1e3b0ba0a7a2d28905',
 } as const;
 
 
 export const LOOKUP_OPTIONS: Record<string, Record<string, {key: string, label: string}[]>> = {
-  'veranstalter': {
-    organisation_typ: [{ key: "verein", label: "Verein" }, { key: "kommune", label: "Kommune" }, { key: "sonstige", label: "Sonstige Organisation" }],
-  },
   'veranstaltungen': {
     kategorie: [{ key: "gesundheit", label: "Gesundheit & Prävention" }, { key: "sport", label: "Sport & Bewegung" }, { key: "ernaehrung", label: "Ernährung" }, { key: "entspannung", label: "Entspannung & Achtsamkeit" }, { key: "beratung", label: "Beratung & Information" }, { key: "sonstiges", label: "Sonstiges" }],
+  },
+  'veranstalter': {
+    organisation_typ: [{ key: "verein", label: "Verein" }, { key: "kommune", label: "Kommune" }, { key: "sonstige", label: "Sonstige Organisation" }],
   },
 };
 
 export const FIELD_TYPES: Record<string, Record<string, string>> = {
-  'veranstalter': {
-    'organisation_name': 'string/text',
-    'organisation_typ': 'lookup/radio',
-    'ansprechpartner_vorname': 'string/text',
-    'ansprechpartner_nachname': 'string/text',
-    'email': 'string/email',
-    'telefon': 'string/tel',
-    'strasse': 'string/text',
-    'hausnummer': 'string/text',
-    'plz': 'string/text',
-    'ort': 'string/text',
-    'website': 'string/url',
-    'beschreibung': 'string/textarea',
-  },
   'veranstaltungen': {
     'veranstalter': 'applookup/select',
     'titel': 'string/text',
@@ -140,6 +126,20 @@ export const FIELD_TYPES: Record<string, Record<string, string>> = {
     'anmerkungen': 'string/textarea',
     'email_benachrichtigung': 'bool',
   },
+  'veranstalter': {
+    'organisation_name': 'string/text',
+    'organisation_typ': 'lookup/radio',
+    'ansprechpartner_vorname': 'string/text',
+    'ansprechpartner_nachname': 'string/text',
+    'email': 'string/email',
+    'telefon': 'string/tel',
+    'strasse': 'string/text',
+    'hausnummer': 'string/text',
+    'plz': 'string/text',
+    'ort': 'string/text',
+    'website': 'string/url',
+    'beschreibung': 'string/textarea',
+  },
 };
 
 type StripLookup<T> = {
@@ -149,6 +149,6 @@ type StripLookup<T> = {
 };
 
 // Helper Types for creating new records (lookup fields as plain strings for API)
-export type CreateVeranstalter = StripLookup<Veranstalter['fields']>;
 export type CreateVeranstaltungen = StripLookup<Veranstaltungen['fields']>;
 export type CreateAnmeldungen = StripLookup<Anmeldungen['fields']>;
+export type CreateVeranstalter = StripLookup<Veranstalter['fields']>;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import type { Veranstaltungen, Veranstalter } from '@/types/app';
-import { APP_IDS } from '@/types/app';
+import type { Veranstaltungen, Veranstalter, LookupValue } from '@/types/app';
+import { APP_IDS, LOOKUP_OPTIONS } from '@/types/app';
 import { extractRecordId, createRecordUrl, cleanFieldsForApi, uploadFile, getUserProfile, LivingAppsService } from '@/services/livingAppsService';
 import {
   Dialog, DialogContent, DialogHeader,
@@ -22,7 +22,7 @@ import { Combobox } from '@/components/Combobox';
 import { VeranstalterDialog } from '@/components/dialogs/VeranstalterDialog';
 import { DatePicker } from '@/components/DatePicker';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconCrosshair, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
+import { IconAlertCircle, IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconCrosshair, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode, dataUriToBlob } from '@/lib/ai';
 import { GeoMapPicker } from '@/components/GeoMapPicker';
 import { lookupKey } from '@/lib/formatters';
@@ -31,7 +31,12 @@ interface VeranstaltungenDialogProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (fields: Veranstaltungen['fields']) => Promise<void>;
-  defaultValues?: Veranstaltungen['fields'];
+  /** SHAPE-TOLERANT: lookup fields accept the bare key (string) or the
+   *  LookupValue object; applookup fields the bare record id or the full
+   *  record URL — the dialog normalizes both. */
+  defaultValues?: Omit<Veranstaltungen['fields'], 'kategorie'> & {
+    kategorie?: LookupValue | string;
+  };
   /** Record id when editing — enables the attachments section. Omit on create. */
   recordId?: string;
   veranstalterList: Veranstalter[];
@@ -39,20 +44,48 @@ interface VeranstaltungenDialogProps {
   enablePhotoLocation?: boolean;
 }
 
+// defaultValues are SHAPE-TOLERANT: the dialog resolves bare lookup keys via
+// its own options and bare record ids via the field's target app — consumers
+// never carry the LookupValue/record-URL shape in their head.
+const NORMALIZE_LOOKUPS: Record<string, readonly { key: string; label: string }[]> = {
+  kategorie: LOOKUP_OPTIONS['veranstaltungen']?.['kategorie'] ?? [],
+};
+const NORMALIZE_APPLOOKUPS: Record<string, string> = {
+  veranstalter: APP_IDS.VERANSTALTER,
+};
+function normalizeDefaults(values: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...values };
+  for (const [k, opts] of Object.entries(NORMALIZE_LOOKUPS)) {
+    const v = out[k];
+    if (typeof v === 'string') out[k] = opts.find(o => o.key === v) ?? { key: v, label: v };
+    else if (Array.isArray(v)) out[k] = v.map(x => (typeof x === 'string' ? opts.find(o => o.key === x) ?? { key: x, label: x } : x));
+  }
+  for (const [k, appId] of Object.entries(NORMALIZE_APPLOOKUPS)) {
+    const v = out[k];
+    if (typeof v === 'string' && v !== '' && !v.startsWith('http')) out[k] = createRecordUrl(appId, v);
+    else if (Array.isArray(v)) out[k] = v.map(x => (typeof x === 'string' && x !== '' && !x.startsWith('http') ? createRecordUrl(appId, x) : x));
+  }
+  return out;
+}
+
 export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, recordId, veranstalterList, enablePhotoScan = true, enablePhotoLocation = true }: VeranstaltungenDialogProps) {
   const [fields, setFields] = useState<Partial<Veranstaltungen['fields']>>({});
   const [saving, setSaving] = useState(false);
+  const normalizedDefaults = useMemo<Record<string, unknown> | undefined>(
+    () => (defaultValues ? normalizeDefaults(defaultValues as Record<string, unknown>) : undefined),
+    [defaultValues],
+  );
   // Dirty-tracking: in edit-mode the Speichern button is disabled until the
   // user actually changes something. JSON.stringify is good enough for our
   // fields (plain values + LookupValue objects + string arrays).
   const isDirty = useMemo(() => {
-    if (!defaultValues) return true;  // create-mode: always allow submit
+    if (!normalizedDefaults) return true;  // create-mode: always allow submit
     try {
-      return JSON.stringify(fields) !== JSON.stringify(defaultValues);
+      return JSON.stringify(fields) !== JSON.stringify(normalizedDefaults);
     } catch {
       return true;
     }
-  }, [fields, defaultValues]);
+  }, [fields, normalizedDefaults]);
   // Inline-Create state for "Veranstalter" target. The dropdown's
   // "+ Neuer …" option opens a sub-dialog; on submit we POST, add the new
   // record to the local `extraVeranstalter` list, and select it in
@@ -120,13 +153,14 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
 
   useEffect(() => {
     if (open) {
-      setFields(applyDefaults((defaultValues ?? {}) as Record<string, unknown>, formEnhancements.defaults) as Partial<Veranstaltungen['fields']>);
+      setFields(applyDefaults(normalizedDefaults ?? {}, formEnhancements.defaults) as Partial<Veranstaltungen['fields']>);
       setPreview(null);
       setScanSuccess(false);
       setAiText('');
+      setSubmitError(null);
       setGeoFromPhoto(false);
     }
-  }, [open, defaultValues]);
+  }, [open, normalizedDefaults]);
   useEffect(() => {
     try { localStorage.setItem('ai-use-personal-info', String(usePersonalInfo)); } catch {}
   }, [usePersonalInfo]);
@@ -144,9 +178,16 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
     }
   }
 
+  // Submit errors surface IN the dialog (it is modal — a banner in the page
+  // body would be hidden behind it). A consumer onSubmit that THROWS (the
+  // documented "throw to prevent closing" validation pattern) lands here:
+  // the dialog stays open, nothing is saved, the message is visible.
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setSubmitError(null);
     try {
       // Fill empty number slots from computed values; user-typed values always win.
       // CRITICAL: only backend-mapped keys may be backfilled. Virtual computeds
@@ -165,6 +206,8 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
       const clean = cleanFieldsForApi(merged, 'veranstaltungen');
       await onSubmit(clean as Veranstaltungen['fields']);
       onClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error && err.message ? err.message : 'Speichern fehlgeschlagen.');
     } finally {
       setSaving(false);
     }
@@ -322,7 +365,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="veranstalter">Veranstalter (E-Mail-Adresse)</Label>
         <Combobox
           id="veranstalter"
-          placeholder="Welche Organisation bietet an?"
+          placeholder=""
           items={veranstalterListAll.map(r => ({
             id: r.record_id,
             label: String(r.fields.organisation_name ?? r.record_id),
@@ -341,7 +384,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="titel">Titel der Veranstaltung</Label>
         <Input
           id="titel"
-          placeholder="z. B. Yoga für Anfänger"
+          placeholder=""
           value={fields.titel ?? ''}
           onChange={e => setFields(f => ({ ...f, titel: e.target.value }))}
         />
@@ -352,7 +395,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="beschreibung_veranstaltung">Beschreibung</Label>
         <Textarea
           id="beschreibung_veranstaltung"
-          placeholder="Was macht die Veranstaltung aus? Ziele, Inhalte, Voraussetzungen..."
+          placeholder=""
           value={fields.beschreibung_veranstaltung ?? ''}
           onChange={e => setFields(f => ({ ...f, beschreibung_veranstaltung: e.target.value }))}
           rows={3}
@@ -366,7 +409,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
           value={lookupKey(fields.kategorie) ?? ''}
           onValueChange={v => setFields(f => ({ ...f, kategorie: v === 'none' ? undefined : v as any }))}
         >
-          <SelectTrigger id="kategorie"><SelectValue placeholder="Kategorie wählen" /></SelectTrigger>
+          <SelectTrigger id="kategorie"><SelectValue placeholder="" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="none">—</SelectItem>
             <SelectItem value="gesundheit">Gesundheit & Prävention</SelectItem>
@@ -384,7 +427,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="beginn">Beginn (Datum & Uhrzeit)</Label>
         <DatePicker
           id="beginn"
-          placeholder="Wann beginnt die Veranstaltung?"
+          placeholder=""
           mode="datetime"
           value={fields.beginn ?? null}
           onChange={v => setFields(f => ({ ...f, beginn: v ?? undefined }))}
@@ -396,7 +439,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="ende">Ende (Datum & Uhrzeit)</Label>
         <DatePicker
           id="ende"
-          placeholder="Wann endet die Veranstaltung?"
+          placeholder=""
           mode="datetime"
           value={fields.ende ?? null}
           onChange={v => setFields(f => ({ ...f, ende: v ?? undefined }))}
@@ -408,7 +451,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="anmeldefrist">Anmeldefrist</Label>
         <DatePicker
           id="anmeldefrist"
-          placeholder="Anmeldefrist wählen"
+          placeholder=""
           mode="date"
           value={fields.anmeldefrist ?? null}
           onChange={v => setFields(f => ({ ...f, anmeldefrist: v ?? undefined }))}
@@ -420,7 +463,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="veranstaltungsort_name">Name des Veranstaltungsorts</Label>
         <Input
           id="veranstaltungsort_name"
-          placeholder="z. B. Fitnessstudio Zentrum"
+          placeholder=""
           value={fields.veranstaltungsort_name ?? ''}
           onChange={e => setFields(f => ({ ...f, veranstaltungsort_name: e.target.value }))}
         />
@@ -431,7 +474,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="veranstaltungsort_strasse">Straße</Label>
         <Input
           id="veranstaltungsort_strasse"
-          placeholder="z. B. Museumstraße"
+          placeholder=""
           value={fields.veranstaltungsort_strasse ?? ''}
           onChange={e => setFields(f => ({ ...f, veranstaltungsort_strasse: e.target.value }))}
         />
@@ -442,7 +485,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="veranstaltungsort_hausnummer">Hausnummer</Label>
         <Input
           id="veranstaltungsort_hausnummer"
-          placeholder="z. B. 15"
+          placeholder=""
           value={fields.veranstaltungsort_hausnummer ?? ''}
           onChange={e => setFields(f => ({ ...f, veranstaltungsort_hausnummer: e.target.value }))}
         />
@@ -453,7 +496,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="veranstaltungsort_plz">Postleitzahl</Label>
         <Input
           id="veranstaltungsort_plz"
-          placeholder="z. B. 10115"
+          placeholder=""
           value={fields.veranstaltungsort_plz ?? ''}
           onChange={e => setFields(f => ({ ...f, veranstaltungsort_plz: e.target.value }))}
         />
@@ -464,7 +507,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="veranstaltungsort_ort">Ort</Label>
         <Input
           id="veranstaltungsort_ort"
-          placeholder="z. B. Berlin-Mitte"
+          placeholder=""
           value={fields.veranstaltungsort_ort ?? ''}
           onChange={e => setFields(f => ({ ...f, veranstaltungsort_ort: e.target.value }))}
         />
@@ -532,7 +575,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
           type="number"
           step="any"
           {...numberInputProps(formEnhancements, 'max_teilnehmer')}
-          placeholder="z. B. 20"
+          placeholder=""
           value={fields.max_teilnehmer !== undefined ? fields.max_teilnehmer : (computedValues['max_teilnehmer'] ?? '')}
           onChange={e => setFields(f => ({ ...f, max_teilnehmer: clampNumberValue(formEnhancements, 'max_teilnehmer', e.target.value) }))}
         />
@@ -543,7 +586,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
         <Label htmlFor="kosten">Kosten / Eintritt</Label>
         <Input
           id="kosten"
-          placeholder="z. B. kostenlos, 15 Euro, 10-20 Euro"
+          placeholder=""
           value={fields.kosten ?? ''}
           onChange={e => setFields(f => ({ ...f, kosten: e.target.value }))}
         />
@@ -979,6 +1022,12 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
               </div>
             )}
           </div>
+          {submitError && (
+            <div className="flex items-start gap-2 border-t border-destructive/20 bg-destructive/10 px-6 py-2.5 text-sm text-destructive" role="alert">
+              <IconAlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span className="min-w-0 break-words">{submitError}</span>
+            </div>
+          )}
           <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
             <Button

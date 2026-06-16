@@ -1,13 +1,13 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useDashboardData } from '@/hooks/useDashboardData';
-import type { Veranstalter, Veranstaltungen, Anmeldungen } from '@/types/app';
+import type { Veranstaltungen, Anmeldungen, Veranstalter } from '@/types/app';
 import { LivingAppsService, extractRecordId, cleanFieldsForApi } from '@/services/livingAppsService';
-import { VeranstalterDialog } from '@/components/dialogs/VeranstalterDialog';
-import { VeranstalterViewDialog } from '@/components/dialogs/VeranstalterViewDialog';
 import { VeranstaltungenDialog } from '@/components/dialogs/VeranstaltungenDialog';
 import { VeranstaltungenViewDialog } from '@/components/dialogs/VeranstaltungenViewDialog';
 import { AnmeldungenDialog } from '@/components/dialogs/AnmeldungenDialog';
 import { AnmeldungenViewDialog } from '@/components/dialogs/AnmeldungenViewDialog';
+import { VeranstalterDialog } from '@/components/dialogs/VeranstalterDialog';
+import { VeranstalterViewDialog } from '@/components/dialogs/VeranstalterViewDialog';
 import { BulkEditDialog } from '@/components/dialogs/BulkEditDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
@@ -34,20 +34,6 @@ function fmtDate(d?: string) {
 }
 
 // Field metadata per entity for bulk edit and column filters
-const VERANSTALTER_FIELDS = [
-  { key: 'organisation_name', label: 'Name der Organisation', type: 'string/text' },
-  { key: 'organisation_typ', label: 'Typ der Organisation', type: 'lookup/radio', options: [{ key: 'verein', label: 'Verein' }, { key: 'kommune', label: 'Kommune' }, { key: 'sonstige', label: 'Sonstige Organisation' }] },
-  { key: 'ansprechpartner_vorname', label: 'Vorname Ansprechpartner', type: 'string/text' },
-  { key: 'ansprechpartner_nachname', label: 'Nachname Ansprechpartner', type: 'string/text' },
-  { key: 'email', label: 'E-Mail-Adresse', type: 'string/email' },
-  { key: 'telefon', label: 'Telefonnummer', type: 'string/tel' },
-  { key: 'strasse', label: 'Straße', type: 'string/text' },
-  { key: 'hausnummer', label: 'Hausnummer', type: 'string/text' },
-  { key: 'plz', label: 'Postleitzahl', type: 'string/text' },
-  { key: 'ort', label: 'Ort', type: 'string/text' },
-  { key: 'website', label: 'Website', type: 'string/url' },
-  { key: 'beschreibung', label: 'Beschreibung der Organisation', type: 'string/textarea' },
-];
 const VERANSTALTUNGEN_FIELDS = [
   { key: 'veranstalter', label: 'Veranstalter (E-Mail-Adresse)', type: 'applookup/select', targetEntity: 'veranstalter', targetAppId: 'VERANSTALTER', displayField: 'organisation_name' },
   { key: 'titel', label: 'Titel der Veranstaltung', type: 'string/text' },
@@ -76,11 +62,25 @@ const ANMELDUNGEN_FIELDS = [
   { key: 'anmerkungen', label: 'Anmerkungen', type: 'string/textarea' },
   { key: 'email_benachrichtigung', label: 'Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden.', type: 'bool' },
 ];
+const VERANSTALTER_FIELDS = [
+  { key: 'organisation_name', label: 'Name der Organisation', type: 'string/text' },
+  { key: 'organisation_typ', label: 'Typ der Organisation', type: 'lookup/radio', options: [{ key: 'verein', label: 'Verein' }, { key: 'kommune', label: 'Kommune' }, { key: 'sonstige', label: 'Sonstige Organisation' }] },
+  { key: 'ansprechpartner_vorname', label: 'Vorname Ansprechpartner', type: 'string/text' },
+  { key: 'ansprechpartner_nachname', label: 'Nachname Ansprechpartner', type: 'string/text' },
+  { key: 'email', label: 'E-Mail-Adresse', type: 'string/email' },
+  { key: 'telefon', label: 'Telefonnummer', type: 'string/tel' },
+  { key: 'strasse', label: 'Straße', type: 'string/text' },
+  { key: 'hausnummer', label: 'Hausnummer', type: 'string/text' },
+  { key: 'plz', label: 'Postleitzahl', type: 'string/text' },
+  { key: 'ort', label: 'Ort', type: 'string/text' },
+  { key: 'website', label: 'Website', type: 'string/url' },
+  { key: 'beschreibung', label: 'Beschreibung der Organisation', type: 'string/textarea' },
+];
 
 const ENTITY_TABS = [
-  { key: 'veranstalter', label: 'Veranstalter', pascal: 'Veranstalter' },
   { key: 'veranstaltungen', label: 'Veranstaltungen', pascal: 'Veranstaltungen' },
   { key: 'anmeldungen', label: 'Anmeldungen', pascal: 'Anmeldungen' },
+  { key: 'veranstalter', label: 'Veranstalter', pascal: 'Veranstalter' },
 ] as const;
 
 type EntityKey = typeof ENTITY_TABS[number]['key'];
@@ -89,16 +89,16 @@ export default function AdminPage() {
   const data = useDashboardData();
   const { loading, error, fetchAll } = data;
 
-  const [activeTab, setActiveTab] = useState<EntityKey>('veranstalter');
+  const [activeTab, setActiveTab] = useState<EntityKey>('veranstaltungen');
   const [selectedIds, setSelectedIds] = useState<Record<EntityKey, Set<string>>>(() => ({
-    'veranstalter': new Set(),
     'veranstaltungen': new Set(),
     'anmeldungen': new Set(),
+    'veranstalter': new Set(),
   }));
   const [filters, setFilters] = useState<Record<EntityKey, Record<string, string>>>(() => ({
-    'veranstalter': {},
     'veranstaltungen': {},
     'anmeldungen': {},
+    'veranstalter': {},
   }));
   const [showFilters, setShowFilters] = useState(false);
   const [dialogState, setDialogState] = useState<{ entity: EntityKey; record: any } | null>(null);
@@ -113,9 +113,9 @@ export default function AdminPage() {
 
   const getRecords = useCallback((entity: EntityKey) => {
     switch (entity) {
-      case 'veranstalter': return (data as any).veranstalter as Veranstalter[] ?? [];
       case 'veranstaltungen': return (data as any).veranstaltungen as Veranstaltungen[] ?? [];
       case 'anmeldungen': return (data as any).anmeldungen as Anmeldungen[] ?? [];
+      case 'veranstalter': return (data as any).veranstalter as Veranstalter[] ?? [];
       default: return [];
     }
   }, [data]);
@@ -152,9 +152,9 @@ export default function AdminPage() {
 
   const getFieldMeta = useCallback((entity: EntityKey) => {
     switch (entity) {
-      case 'veranstalter': return VERANSTALTER_FIELDS;
       case 'veranstaltungen': return VERANSTALTUNGEN_FIELDS;
       case 'anmeldungen': return ANMELDUNGEN_FIELDS;
+      case 'veranstalter': return VERANSTALTER_FIELDS;
       default: return [];
     }
   }, []);
@@ -249,11 +249,6 @@ export default function AdminPage() {
 
   const getServiceMethods = useCallback((entity: EntityKey) => {
     switch (entity) {
-      case 'veranstalter': return {
-        create: (fields: any) => LivingAppsService.createVeranstalterEntry(fields),
-        update: (id: string, fields: any) => LivingAppsService.updateVeranstalterEntry(id, fields),
-        remove: (id: string) => LivingAppsService.deleteVeranstalterEntry(id),
-      };
       case 'veranstaltungen': return {
         create: (fields: any) => LivingAppsService.createVeranstaltungenEntry(fields),
         update: (id: string, fields: any) => LivingAppsService.updateVeranstaltungenEntry(id, fields),
@@ -263,6 +258,11 @@ export default function AdminPage() {
         create: (fields: any) => LivingAppsService.createAnmeldungenEntry(fields),
         update: (id: string, fields: any) => LivingAppsService.updateAnmeldungenEntry(id, fields),
         remove: (id: string) => LivingAppsService.deleteAnmeldungenEntry(id),
+      };
+      case 'veranstalter': return {
+        create: (fields: any) => LivingAppsService.createVeranstalterEntry(fields),
+        update: (id: string, fields: any) => LivingAppsService.updateVeranstalterEntry(id, fields),
+        remove: (id: string) => LivingAppsService.deleteVeranstalterEntry(id),
       };
       default: return null;
     }
@@ -604,16 +604,6 @@ export default function AdminPage() {
         </Table>
       </div>
 
-      {(createEntity === 'veranstalter' || dialogState?.entity === 'veranstalter') && (
-        <VeranstalterDialog
-          open={createEntity === 'veranstalter' || dialogState?.entity === 'veranstalter'}
-          onClose={() => { setCreateEntity(null); setDialogState(null); }}
-          onSubmit={dialogState?.entity === 'veranstalter' ? handleUpdate : (fields: any) => handleCreate('veranstalter', fields)}
-          defaultValues={dialogState?.entity === 'veranstalter' ? dialogState.record?.fields : undefined}
-          enablePhotoScan={AI_PHOTO_SCAN['Veranstalter']}
-          enablePhotoLocation={AI_PHOTO_LOCATION['Veranstalter']}
-        />
-      )}
       {(createEntity === 'veranstaltungen' || dialogState?.entity === 'veranstaltungen') && (
         <VeranstaltungenDialog
           open={createEntity === 'veranstaltungen' || dialogState?.entity === 'veranstaltungen'}
@@ -636,12 +626,14 @@ export default function AdminPage() {
           enablePhotoLocation={AI_PHOTO_LOCATION['Anmeldungen']}
         />
       )}
-      {viewState?.entity === 'veranstalter' && (
-        <VeranstalterViewDialog
-          open={viewState?.entity === 'veranstalter'}
-          onClose={() => setViewState(null)}
-          record={viewState?.record}
-          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'veranstalter', record: r }); }}
+      {(createEntity === 'veranstalter' || dialogState?.entity === 'veranstalter') && (
+        <VeranstalterDialog
+          open={createEntity === 'veranstalter' || dialogState?.entity === 'veranstalter'}
+          onClose={() => { setCreateEntity(null); setDialogState(null); }}
+          onSubmit={dialogState?.entity === 'veranstalter' ? handleUpdate : (fields: any) => handleCreate('veranstalter', fields)}
+          defaultValues={dialogState?.entity === 'veranstalter' ? dialogState.record?.fields : undefined}
+          enablePhotoScan={AI_PHOTO_SCAN['Veranstalter']}
+          enablePhotoLocation={AI_PHOTO_LOCATION['Veranstalter']}
         />
       )}
       {viewState?.entity === 'veranstaltungen' && (
@@ -660,6 +652,14 @@ export default function AdminPage() {
           record={viewState?.record}
           onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'anmeldungen', record: r }); }}
           veranstaltungenList={(data as any).veranstaltungen ?? []}
+        />
+      )}
+      {viewState?.entity === 'veranstalter' && (
+        <VeranstalterViewDialog
+          open={viewState?.entity === 'veranstalter'}
+          onClose={() => setViewState(null)}
+          record={viewState?.record}
+          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'veranstalter', record: r }); }}
         />
       )}
 

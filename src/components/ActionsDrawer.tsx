@@ -164,7 +164,7 @@ interface ActionsDrawerProps {
 export function ActionsDrawer({ open, onClose }: ActionsDrawerProps) {
   const {
     actions, runAction, deleteAction, showActionCode, deleteAppAttachment,
-    devMode, runningActionId, filesByAction, downloadFile,
+    devMode, runningActionId, filesByAction, downloadFile, setChatOpen,
   } = useActions();
 
   const unassigned = filesByAction['__unassigned__'] || [];
@@ -217,7 +217,24 @@ export function ActionsDrawer({ open, onClose }: ActionsDrawerProps) {
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
           {actions.length === 0 && unassigned.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-12">Noch keine Werkzeuge angelegt.</p>
+            <div className="flex flex-col items-center gap-3 py-12 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent">
+                <IconBolt size={22} className="text-accent-foreground" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Noch keine Werkzeuge angelegt</p>
+                <p className="mt-1 max-w-[16rem] text-sm text-muted-foreground">
+                  Beschreibe im Chat, was du automatisieren willst — daraus entsteht dein erstes Werkzeug.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { onClose(); setChatOpen(true); }}
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Im Chat erstellen
+              </button>
+            </div>
           ) : (
             <>
               {actions.map(a => (

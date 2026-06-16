@@ -1,59 +1,67 @@
 /**
- * MediaViewer — pre-generated media/asset viewer widget set.
+ * MediaViewer — pre-generated media/asset viewer widget set (Archetype A).
  *
- * The "enlarge / zoom / preview a file" UX ships here as composable pieces.
- * Compose; never reimplement. Building a custom `<div className="fixed
- * inset-0">` lightbox for an image or file is forbidden — THIS file is the
- * lightbox. Customize via props, never by replacing the shell.
+ * The "enlarge / zoom / preview a file" UX ships here as composable pieces:
+ * images zoom & pan, PDFs render in an iframe, other files get an open/
+ * download affordance. Compose; never reimplement. Building a custom
+ * `<div className="fixed inset-0">` lightbox for an image or file is forbidden
+ * — THIS file is the lightbox. Customize via props, never by replacing it.
  *
- * ─── When to use ──────────────────────────────────────────────────────
+ * ─── HARD RULES (read first) ───────────────────────────────────────────
+ *  1. Never hand-roll a fixed-inset-0 image/file modal — use <MediaLightbox>.
+ *  2. Zoom belongs on a DETAIL surface, NOT on a clickable list/gallery tile.
+ *     A tile is ONE click target → it opens the <RecordOverlay>; its image is
+ *     a passive `<img className="object-cover">`. Put the <MediaThumbnail> on
+ *     the overlay/header `media` slot instead.
+ *  3. Never edit this file. If a capability is missing: unblock via the
+ *     component props/children + // TODO(widget-gap). Never fork, never leave
+ *     the build red.
  *
- * Any time a file URL should be more than a static thumbnail — a `file/*`
- * field, an attachment, the `media` slot of <RecordHeader> / <RecordOverlay>.
- * Images zoom & pan; PDFs render in an iframe; other files get an
- * open/download affordance.
+ * ─── API at a glance (exact prop names — NEVER guess) ──────────────────
  *
- * NOT on a clickable list/gallery TILE. A tile is one click target → it
- * opens the <RecordOverlay>; its image is a passive preview, a plain
- * `<img className="object-cover">`. A <MediaThumbnail> there would steal the
- * click to open its own lightbox and fight the tile. Zoom belongs INSIDE the
- * overlay: put the <MediaThumbnail> on the overlay's `media` slot.
+ *  type MediaKind = 'image' | 'pdf' | 'file';
+ *  type MediaItem = { url: string; title?: string; kind?: MediaKind };
  *
- * ─── Pieces ───────────────────────────────────────────────────────────
+ *  <MediaThumbnail src alt?(default '') kind?: MediaKind fit?: 'cover'|'contain'
+ *                  (default 'cover') className? onClick?>
+ *    Clickable preview. With NO `onClick` it is self-contained: clicking opens
+ *    its own full-screen <MediaLightbox> for that single asset — the drop-in
+ *    "make this image zoomable" piece. Pass `onClick` to drive a SHARED
+ *    gallery lightbox instead (see useMediaViewer). `fit='cover'` = square
+ *    tiles; `'contain'` = full asset, width-driven.
  *
- *  <MediaThumbnail src alt? kind? fit? className? onClick?>
- *    Clickable preview. With no `onClick` it is self-contained: clicking
- *    opens its own full-screen <MediaLightbox> for that single asset — the
- *    drop-in "make this image zoomable" component. Pass `onClick` to drive a
- *    shared gallery lightbox instead (see useMediaViewer). `fit='cover'`
- *    (default, square tiles) | `'contain'` (full asset, width-driven).
+ *  <MediaLightbox open items: MediaItem[] index onClose onIndexChange?(index)>
+ *    Full-screen viewer. Image: wheel / buttons / double-click to zoom, drag
+ *    to pan. PDF: iframe. Other: download card. Prev/next arrows + counter +
+ *    ←/→ keys when `items.length > 1`. Esc closes. Pass `onIndexChange` for
+ *    controlled paging, else it self-manages its index.
  *
- *  <MediaLightbox open items index onClose onIndexChange?>
- *    Full-screen viewer. `items: MediaItem[]`. Image: wheel / buttons /
- *    double-click to zoom, drag to pan. PDF: iframe. Other: download card.
- *    Prev/next arrows + counter + ←/→ keys when `items.length > 1`. Esc
- *    closes. Controlled paging via `onIndexChange`, else it self-manages.
+ *  useMediaViewer() -> { open, items: MediaItem[], index, openWith(items, index?),
+ *                        setIndex(index), close() }
+ *    One shared <MediaLightbox> for a gallery of thumbnails. `openWith` seeds
+ *    the item list + starting index; `setIndex` is the paging callback.
  *
- *  useMediaViewer()  →  { open, items, index, openWith, setIndex, close }
- *    Manages one shared lightbox for a gallery of thumbnails:
- *
- *      const mv = useMediaViewer();
- *      {urls.map((u, i) => (
- *        <MediaThumbnail key={u} src={u} className="aspect-square"
- *          onClick={() => mv.openWith(urls.map(url => ({ url })), i)} />
- *      ))}
- *      <MediaLightbox open={mv.open} items={mv.items} index={mv.index}
- *        onClose={mv.close} onIndexChange={mv.setIndex} />
- *
- *  inferMediaKind(url)  →  'image' | 'pdf' | 'file'
- *    Optimistic: only `.pdf` → pdf and known doc/archive extensions → file;
- *    everything else (incl. extension-less REST URLs) → image, with an
- *    `<img onError>` fallback to a file tile. So real images served from
+ *  inferMediaKind(url) -> MediaKind
+ *    Optimistic: only `.pdf` → 'pdf' and known doc/archive extensions → 'file';
+ *    everything else (incl. extension-less REST URLs — the LA norm) → 'image',
+ *    with an `<img onError>` fallback to a file tile. Real images on
  *    extension-less URLs still render & zoom.
  *
- * ─── Hard rules ───────────────────────────────────────────────────────
- *  • Never hand-roll a fixed-inset-0 image/file modal — use <MediaLightbox>.
- *  • Never edit this file. Missing capability = Generator bug, report it.
+ * ─── ❌ COMMON MISTAKES (real build failures) ──────────────────────────
+ *  ❌ A <MediaThumbnail> inside a clickable tile → two click targets fight
+ *     (tile-open vs. its own lightbox). Tiles use a passive <img>; zoom lives
+ *     on the overlay's `media` slot.
+ *  ❌ Expecting video to zoom/play: the closed lightbox set is image|pdf|file
+ *     (no renderItem escape) → video files land as plain file tiles (download
+ *     card). Don't pass `kind:'image'` for an .mp4.
+ *  ❌ A hand-rolled `fixed inset-0` lightbox → compose <MediaLightbox>.
+ *  ❌ Gating "is this an image?" on a positive extension match → LA file URLs
+ *     have NO extension. Trust inferMediaKind's optimistic default.
+ *
+ * Full compiling example: ./MediaViewer.example.tsx
+ *
+ * @version 1.0.0
+ * @since 2026-06-03
  */
 import { type ReactNode, useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';

@@ -17,13 +17,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Combobox } from '@/components/Combobox';
 import { VeranstaltungenDialog } from '@/components/dialogs/VeranstaltungenDialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
+import { IconAlertCircle, IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode } from '@/lib/ai';
 
 interface AnmeldungenDialogProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (fields: Anmeldungen['fields']) => Promise<void>;
+  /** SHAPE-TOLERANT: lookup fields accept the bare key (string) or the
+   *  LookupValue object; applookup fields the bare record id or the full
+   *  record URL — the dialog normalizes both. */
   defaultValues?: Anmeldungen['fields'];
   /** Record id when editing — enables the attachments section. Omit on create. */
   recordId?: string;
@@ -32,20 +35,40 @@ interface AnmeldungenDialogProps {
   enablePhotoLocation?: boolean;
 }
 
+// defaultValues are SHAPE-TOLERANT: the dialog resolves bare lookup keys via
+// its own options and bare record ids via the field's target app — consumers
+// never carry the LookupValue/record-URL shape in their head.
+const NORMALIZE_APPLOOKUPS: Record<string, string> = {
+  veranstaltung: APP_IDS.VERANSTALTUNGEN,
+};
+function normalizeDefaults(values: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...values };
+  for (const [k, appId] of Object.entries(NORMALIZE_APPLOOKUPS)) {
+    const v = out[k];
+    if (typeof v === 'string' && v !== '' && !v.startsWith('http')) out[k] = createRecordUrl(appId, v);
+    else if (Array.isArray(v)) out[k] = v.map(x => (typeof x === 'string' && x !== '' && !x.startsWith('http') ? createRecordUrl(appId, x) : x));
+  }
+  return out;
+}
+
 export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, recordId, veranstaltungenList, enablePhotoScan = true, enablePhotoLocation = true }: AnmeldungenDialogProps) {
   const [fields, setFields] = useState<Partial<Anmeldungen['fields']>>({});
   const [saving, setSaving] = useState(false);
+  const normalizedDefaults = useMemo<Record<string, unknown> | undefined>(
+    () => (defaultValues ? normalizeDefaults(defaultValues as Record<string, unknown>) : undefined),
+    [defaultValues],
+  );
   // Dirty-tracking: in edit-mode the Speichern button is disabled until the
   // user actually changes something. JSON.stringify is good enough for our
   // fields (plain values + LookupValue objects + string arrays).
   const isDirty = useMemo(() => {
-    if (!defaultValues) return true;  // create-mode: always allow submit
+    if (!normalizedDefaults) return true;  // create-mode: always allow submit
     try {
-      return JSON.stringify(fields) !== JSON.stringify(defaultValues);
+      return JSON.stringify(fields) !== JSON.stringify(normalizedDefaults);
     } catch {
       return true;
     }
-  }, [fields, defaultValues]);
+  }, [fields, normalizedDefaults]);
   // Inline-Create state for "Veranstaltungen" target. The dropdown's
   // "+ Neuer …" option opens a sub-dialog; on submit we POST, add the new
   // record to the local `extraVeranstaltungen` list, and select it in
@@ -113,12 +136,13 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
 
   useEffect(() => {
     if (open) {
-      setFields(applyDefaults((defaultValues ?? {}) as Record<string, unknown>, formEnhancements.defaults) as Partial<Anmeldungen['fields']>);
+      setFields(applyDefaults(normalizedDefaults ?? {}, formEnhancements.defaults) as Partial<Anmeldungen['fields']>);
       setPreview(null);
       setScanSuccess(false);
       setAiText('');
+      setSubmitError(null);
     }
-  }, [open, defaultValues]);
+  }, [open, normalizedDefaults]);
   useEffect(() => {
     try { localStorage.setItem('ai-use-personal-info', String(usePersonalInfo)); } catch {}
   }, [usePersonalInfo]);
@@ -136,9 +160,16 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
     }
   }
 
+  // Submit errors surface IN the dialog (it is modal — a banner in the page
+  // body would be hidden behind it). A consumer onSubmit that THROWS (the
+  // documented "throw to prevent closing" validation pattern) lands here:
+  // the dialog stays open, nothing is saved, the message is visible.
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setSubmitError(null);
     try {
       // Fill empty number slots from computed values; user-typed values always win.
       // CRITICAL: only backend-mapped keys may be backfilled. Virtual computeds
@@ -157,6 +188,8 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
       const clean = cleanFieldsForApi(merged, 'anmeldungen');
       await onSubmit(clean as Anmeldungen['fields']);
       onClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error && err.message ? err.message : 'Speichern fehlgeschlagen.');
     } finally {
       setSaving(false);
     }
@@ -271,7 +304,7 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
         <Label htmlFor="veranstaltung">Veranstaltung</Label>
         <Combobox
           id="veranstaltung"
-          placeholder="An welcher Veranstaltung anmelden?"
+          placeholder=""
           items={veranstaltungenListAll.map(r => ({
             id: r.record_id,
             label: String(r.fields.titel ?? r.record_id),
@@ -290,7 +323,7 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
         <Label htmlFor="vorname">Vorname</Label>
         <Input
           id="vorname"
-          placeholder="z. B. Anna"
+          placeholder=""
           value={fields.vorname ?? ''}
           onChange={e => setFields(f => ({ ...f, vorname: e.target.value }))}
         />
@@ -301,7 +334,7 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
         <Label htmlFor="nachname">Nachname</Label>
         <Input
           id="nachname"
-          placeholder="z. B. Schmidt"
+          placeholder=""
           value={fields.nachname ?? ''}
           onChange={e => setFields(f => ({ ...f, nachname: e.target.value }))}
         />
@@ -313,7 +346,7 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
         <Input
           id="email_anmeldung"
           type="email"
-          placeholder="z. B. anna@example.com"
+          placeholder=""
           value={fields.email_anmeldung ?? ''}
           onChange={e => setFields(f => ({ ...f, email_anmeldung: e.target.value }))}
         />
@@ -337,7 +370,7 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
           type="number"
           step="any"
           {...numberInputProps(formEnhancements, 'anzahl_personen')}
-          placeholder="z. B. 1"
+          placeholder=""
           value={fields.anzahl_personen !== undefined ? fields.anzahl_personen : (computedValues['anzahl_personen'] ?? '')}
           onChange={e => setFields(f => ({ ...f, anzahl_personen: clampNumberValue(formEnhancements, 'anzahl_personen', e.target.value) }))}
         />
@@ -348,7 +381,7 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
         <Label htmlFor="anmerkungen">Anmerkungen</Label>
         <Textarea
           id="anmerkungen"
-          placeholder="Besondere Wünsche, Fragen, Hinweise..."
+          placeholder=""
           value={fields.anmerkungen ?? ''}
           onChange={e => setFields(f => ({ ...f, anmerkungen: e.target.value }))}
           rows={3}
@@ -728,6 +761,12 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
               </div>
             )}
           </div>
+          {submitError && (
+            <div className="flex items-start gap-2 border-t border-destructive/20 bg-destructive/10 px-6 py-2.5 text-sm text-destructive" role="alert">
+              <IconAlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span className="min-w-0 break-words">{submitError}</span>
+            </div>
+          )}
           <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
             <Button

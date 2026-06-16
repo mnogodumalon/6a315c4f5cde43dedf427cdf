@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import type { Veranstalter } from '@/types/app';
-import { APP_IDS } from '@/types/app';
+import type { Veranstalter, LookupValue } from '@/types/app';
+import { APP_IDS, LOOKUP_OPTIONS } from '@/types/app';
 import { extractRecordId, createRecordUrl, cleanFieldsForApi, getUserProfile } from '@/services/livingAppsService';
 import {
   Dialog, DialogContent, DialogHeader,
@@ -15,7 +15,7 @@ import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/
 import { AttachmentsSection } from '@/components/AttachmentsSection';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
+import { IconAlertCircle, IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode } from '@/lib/ai';
 import { lookupKey } from '@/lib/formatters';
 
@@ -23,27 +23,52 @@ interface VeranstalterDialogProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (fields: Veranstalter['fields']) => Promise<void>;
-  defaultValues?: Veranstalter['fields'];
+  /** SHAPE-TOLERANT: lookup fields accept the bare key (string) or the
+   *  LookupValue object; applookup fields the bare record id or the full
+   *  record URL — the dialog normalizes both. */
+  defaultValues?: Omit<Veranstalter['fields'], 'organisation_typ'> & {
+    organisation_typ?: LookupValue | string;
+  };
   /** Record id when editing — enables the attachments section. Omit on create. */
   recordId?: string;
   enablePhotoScan?: boolean;
   enablePhotoLocation?: boolean;
 }
 
+// defaultValues are SHAPE-TOLERANT: the dialog resolves bare lookup keys via
+// its own options and bare record ids via the field's target app — consumers
+// never carry the LookupValue/record-URL shape in their head.
+const NORMALIZE_LOOKUPS: Record<string, readonly { key: string; label: string }[]> = {
+  organisation_typ: LOOKUP_OPTIONS['veranstalter']?.['organisation_typ'] ?? [],
+};
+function normalizeDefaults(values: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...values };
+  for (const [k, opts] of Object.entries(NORMALIZE_LOOKUPS)) {
+    const v = out[k];
+    if (typeof v === 'string') out[k] = opts.find(o => o.key === v) ?? { key: v, label: v };
+    else if (Array.isArray(v)) out[k] = v.map(x => (typeof x === 'string' ? opts.find(o => o.key === x) ?? { key: x, label: x } : x));
+  }
+  return out;
+}
+
 export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, recordId, enablePhotoScan = true, enablePhotoLocation = true }: VeranstalterDialogProps) {
   const [fields, setFields] = useState<Partial<Veranstalter['fields']>>({});
   const [saving, setSaving] = useState(false);
+  const normalizedDefaults = useMemo<Record<string, unknown> | undefined>(
+    () => (defaultValues ? normalizeDefaults(defaultValues as Record<string, unknown>) : undefined),
+    [defaultValues],
+  );
   // Dirty-tracking: in edit-mode the Speichern button is disabled until the
   // user actually changes something. JSON.stringify is good enough for our
   // fields (plain values + LookupValue objects + string arrays).
   const isDirty = useMemo(() => {
-    if (!defaultValues) return true;  // create-mode: always allow submit
+    if (!normalizedDefaults) return true;  // create-mode: always allow submit
     try {
-      return JSON.stringify(fields) !== JSON.stringify(defaultValues);
+      return JSON.stringify(fields) !== JSON.stringify(normalizedDefaults);
     } catch {
       return true;
     }
-  }, [fields, defaultValues]);
+  }, [fields, normalizedDefaults]);
   const [aiOpen, setAiOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
@@ -93,12 +118,13 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
 
   useEffect(() => {
     if (open) {
-      setFields(applyDefaults((defaultValues ?? {}) as Record<string, unknown>, formEnhancements.defaults) as Partial<Veranstalter['fields']>);
+      setFields(applyDefaults(normalizedDefaults ?? {}, formEnhancements.defaults) as Partial<Veranstalter['fields']>);
       setPreview(null);
       setScanSuccess(false);
       setAiText('');
+      setSubmitError(null);
     }
-  }, [open, defaultValues]);
+  }, [open, normalizedDefaults]);
   useEffect(() => {
     try { localStorage.setItem('ai-use-personal-info', String(usePersonalInfo)); } catch {}
   }, [usePersonalInfo]);
@@ -116,9 +142,16 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
     }
   }
 
+  // Submit errors surface IN the dialog (it is modal — a banner in the page
+  // body would be hidden behind it). A consumer onSubmit that THROWS (the
+  // documented "throw to prevent closing" validation pattern) lands here:
+  // the dialog stays open, nothing is saved, the message is visible.
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setSubmitError(null);
     try {
       // Fill empty number slots from computed values; user-typed values always win.
       // CRITICAL: only backend-mapped keys may be backfilled. Virtual computeds
@@ -137,6 +170,8 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
       const clean = cleanFieldsForApi(merged, 'veranstalter');
       await onSubmit(clean as Veranstalter['fields']);
       onClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error && err.message ? err.message : 'Speichern fehlgeschlagen.');
     } finally {
       setSaving(false);
     }
@@ -243,7 +278,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
         <Label htmlFor="organisation_name">Name der Organisation</Label>
         <Input
           id="organisation_name"
-          placeholder="z. B. Sportverein Fit & Gesund"
+          placeholder=""
           value={fields.organisation_name ?? ''}
           onChange={e => setFields(f => ({ ...f, organisation_name: e.target.value }))}
         />
@@ -300,7 +335,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
         <Label htmlFor="ansprechpartner_vorname">Vorname Ansprechpartner</Label>
         <Input
           id="ansprechpartner_vorname"
-          placeholder="z. B. Max"
+          placeholder=""
           value={fields.ansprechpartner_vorname ?? ''}
           onChange={e => setFields(f => ({ ...f, ansprechpartner_vorname: e.target.value }))}
         />
@@ -311,7 +346,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
         <Label htmlFor="ansprechpartner_nachname">Nachname Ansprechpartner</Label>
         <Input
           id="ansprechpartner_nachname"
-          placeholder="z. B. Müller"
+          placeholder=""
           value={fields.ansprechpartner_nachname ?? ''}
           onChange={e => setFields(f => ({ ...f, ansprechpartner_nachname: e.target.value }))}
         />
@@ -323,7 +358,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
         <Input
           id="email"
           type="email"
-          placeholder="z. B. max@sportverein.de"
+          placeholder=""
           value={fields.email ?? ''}
           onChange={e => setFields(f => ({ ...f, email: e.target.value }))}
         />
@@ -344,7 +379,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
         <Label htmlFor="strasse">Straße</Label>
         <Input
           id="strasse"
-          placeholder="z. B. Hauptstraße"
+          placeholder=""
           value={fields.strasse ?? ''}
           onChange={e => setFields(f => ({ ...f, strasse: e.target.value }))}
         />
@@ -355,7 +390,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
         <Label htmlFor="hausnummer">Hausnummer</Label>
         <Input
           id="hausnummer"
-          placeholder="z. B. 42"
+          placeholder=""
           value={fields.hausnummer ?? ''}
           onChange={e => setFields(f => ({ ...f, hausnummer: e.target.value }))}
         />
@@ -366,7 +401,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
         <Label htmlFor="plz">Postleitzahl</Label>
         <Input
           id="plz"
-          placeholder="z. B. 10115"
+          placeholder=""
           value={fields.plz ?? ''}
           onChange={e => setFields(f => ({ ...f, plz: e.target.value }))}
         />
@@ -377,7 +412,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
         <Label htmlFor="ort">Ort</Label>
         <Input
           id="ort"
-          placeholder="z. B. Berlin"
+          placeholder=""
           value={fields.ort ?? ''}
           onChange={e => setFields(f => ({ ...f, ort: e.target.value }))}
         />
@@ -398,7 +433,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
         <Label htmlFor="beschreibung">Beschreibung der Organisation</Label>
         <Textarea
           id="beschreibung"
-          placeholder="Kurzbeschreibung: Wer seid ihr? Schwerpunkte, Angebote, besondere Merkmale..."
+          placeholder=""
           value={fields.beschreibung ?? ''}
           onChange={e => setFields(f => ({ ...f, beschreibung: e.target.value }))}
           rows={3}
@@ -765,6 +800,12 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
               </div>
             )}
           </div>
+          {submitError && (
+            <div className="flex items-start gap-2 border-t border-destructive/20 bg-destructive/10 px-6 py-2.5 text-sm text-destructive" role="alert">
+              <IconAlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span className="min-w-0 break-words">{submitError}</span>
+            </div>
+          )}
           <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
             <Button

@@ -5,6 +5,7 @@ import ChatWidget from '@/components/ChatWidget';
 import { ActionInputDialog } from '@/components/ActionInputDialog';
 import { TopBar } from '@/components/TopBar';
 import { ActionsSidebar } from '@/components/ActionsSidebar';
+import { IntentsNav } from '@/components/IntentsNav';
 import { useActions } from '@/context/ActionsContext';
 import { Button } from '@/components/ui/button';
 import { VersionCheck } from '@/components/VersionCheck';
@@ -69,13 +70,15 @@ export function Layout() {
         <div className="flex flex-col h-full">
         <nav className="px-3 pt-4 space-y-0.5">
           <a
-            href="/gateway/apps/6a315b1e3b0ba0a7a2d28905?template=list_page"
+            href="/gateway/apps/6a315b225049324bae74cc15?template=list_page"
             className="flex items-center gap-2 px-4 py-2 rounded-2xl text-base transition-colors min-w-0 text-sidebar-foreground font-normal hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
           >
             <IconArrowBackUp size={16} className="shrink-0" />
             <span className="truncate">Zurück</span>
           </a>
         </nav>
+
+        <IntentsNav onNavigate={() => setSidebarOpen(false)} />
 
         <ActionsSidebar />
 

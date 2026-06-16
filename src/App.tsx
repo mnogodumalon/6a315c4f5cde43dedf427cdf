@@ -7,15 +7,15 @@ import { ErrorBusProvider } from '@/components/ErrorBus';
 import { Layout } from '@/components/Layout';
 import DashboardOverview from '@/pages/DashboardOverview';
 import AdminPage from '@/pages/AdminPage';
-import VeranstalterPage from '@/pages/VeranstalterPage';
-import VeranstalterDetailPage from '@/pages/VeranstalterDetailPage';
 import VeranstaltungenPage from '@/pages/VeranstaltungenPage';
 import VeranstaltungenDetailPage from '@/pages/VeranstaltungenDetailPage';
 import AnmeldungenPage from '@/pages/AnmeldungenPage';
 import AnmeldungenDetailPage from '@/pages/AnmeldungenDetailPage';
-import PublicFormVeranstalter from '@/pages/public/PublicForm_Veranstalter';
+import VeranstalterPage from '@/pages/VeranstalterPage';
+import VeranstalterDetailPage from '@/pages/VeranstalterDetailPage';
 import PublicFormVeranstaltungen from '@/pages/public/PublicForm_Veranstaltungen';
 import PublicFormAnmeldungen from '@/pages/public/PublicForm_Anmeldungen';
+import PublicFormVeranstalter from '@/pages/public/PublicForm_Veranstalter';
 // <public:imports>
 // </public:imports>
 // <custom:imports>
@@ -29,19 +29,19 @@ export default function App() {
         <HashRouter>
           <ActionsProvider>
             <Routes>
-              <Route path="public/6a315b1e3b0ba0a7a2d28905" element={<PublicFormVeranstalter />} />
               <Route path="public/6a315b225049324bae74cc15" element={<PublicFormVeranstaltungen />} />
               <Route path="public/6a315b23fe1f8743a7f9aaff" element={<PublicFormAnmeldungen />} />
+              <Route path="public/6a315b1e3b0ba0a7a2d28905" element={<PublicFormVeranstalter />} />
               {/* <public:routes> */}
               {/* </public:routes> */}
               <Route element={<Layout />}>
                 <Route index element={<DashboardOverview />} />
-                <Route path="veranstalter" element={<VeranstalterPage />} />
-                <Route path="veranstalter/:id" element={<VeranstalterDetailPage />} />
                 <Route path="veranstaltungen" element={<VeranstaltungenPage />} />
                 <Route path="veranstaltungen/:id" element={<VeranstaltungenDetailPage />} />
                 <Route path="anmeldungen" element={<AnmeldungenPage />} />
                 <Route path="anmeldungen/:id" element={<AnmeldungenDetailPage />} />
+                <Route path="veranstalter" element={<VeranstalterPage />} />
+                <Route path="veranstalter/:id" element={<VeranstalterDetailPage />} />
                 <Route path="admin" element={<AdminPage />} />
                 {/* <custom:routes> */}
                 <Route path="intents/gruppen-anmeldung" element={<Suspense fallback={null}><GruppenAnmeldungPage /></Suspense>} />

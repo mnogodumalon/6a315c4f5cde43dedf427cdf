@@ -1,0 +1,362 @@
+import { useState, useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { DatePicker } from '@/components/DatePicker';
+import { IconChevronDown, IconCrosshair, IconLoader2 } from '@tabler/icons-react';
+import { GeoMapPicker } from '@/components/GeoMapPicker';
+import { lookupKey } from '@/lib/formatters';
+
+// Empty PROXY_BASE → relative URLs (dashboard and form-proxy share the domain).
+const PROXY_BASE = '';
+const APP_ID = '6a315b225049324bae74cc15';
+const SUBMIT_PATH = `/rest/apps/${APP_ID}/records`;
+const ALTCHA_SCRIPT_SRC = 'https://cdn.jsdelivr.net/npm/altcha/dist/altcha.min.js';
+
+async function submitPublicForm(fields: Record<string, unknown>, captchaToken: string) {
+  const res = await fetch(`${PROXY_BASE}/api${SUBMIT_PATH}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Captcha-Token': captchaToken,
+    },
+    body: JSON.stringify({ fields }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err || 'Submission failed');
+  }
+  return res.json();
+}
+
+
+function cleanFields(fields: Record<string, unknown>): Record<string, unknown> {
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value == null) continue;
+    if (typeof value === 'object' && !Array.isArray(value) && 'key' in (value as any)) {
+      cleaned[key] = (value as any).key;
+    } else if (Array.isArray(value)) {
+      cleaned[key] = value.map(item =>
+        typeof item === 'object' && item !== null && 'key' in item ? item.key : item
+      );
+    } else {
+      cleaned[key] = value;
+    }
+  }
+  return cleaned;
+}
+
+export default function PublicFormVeranstaltungen() {
+  const [fields, setFields] = useState<Record<string, any>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const captchaRef = useRef<HTMLElement | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [geoFromPhoto, setGeoFromPhoto] = useState(false);
+  const [showCoords, setShowCoords] = useState(false);
+
+  // Load the ALTCHA web component script once per page.
+  useEffect(() => {
+    if (document.querySelector(`script[src="${ALTCHA_SCRIPT_SRC}"]`)) return;
+    const s = document.createElement('script');
+    s.src = ALTCHA_SCRIPT_SRC;
+    s.defer = true;
+    document.head.appendChild(s);
+  }, []);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    const qIdx = hash.indexOf('?');
+    if (qIdx === -1) return;
+    const params = new URLSearchParams(hash.slice(qIdx + 1));
+    const prefill: Record<string, any> = {};
+    params.forEach((value, key) => { prefill[key] = value; });
+    if (Object.keys(prefill).length) setFields(prev => ({ ...prefill, ...prev }));
+  }, []);
+
+  async function geoLocate(fieldKey: string) {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setFields(f => ({ ...f, [fieldKey]: { lat: pos.coords.latitude, long: pos.coords.longitude, info: '' } }));
+        setLocating(false);
+      },
+      () => setLocating(false)
+    );
+  }
+
+  function handleMapMove(fieldKey: string, lat: number, lng: number) {
+    setFields(f => ({ ...f, [fieldKey]: { ...(f[fieldKey] ?? {}), lat, long: lng } }));
+  }
+
+  function readCaptchaToken(): string | null {
+    const el = captchaRef.current as any;
+    if (!el) return null;
+    return el.value || el.getAttribute('value') || null;
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const token = readCaptchaToken();
+    if (!token) {
+      setError('Bitte warte auf die Spam-Prüfung und versuche es erneut.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await submitPublicForm(cleanFields(fields), token);
+      setSubmitted(true);
+    } catch (err: any) {
+      setError(err.message || 'Etwas ist schiefgelaufen. Bitte versuche es erneut.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="text-center space-y-4 max-w-md">
+          <div className="h-16 w-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+            <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold">Vielen Dank!</h2>
+          <p className="text-muted-foreground">Deine Eingabe wurde erfolgreich übermittelt.</p>
+          <Button variant="outline" className="mt-4" onClick={() => { setSubmitted(false); setFields({}); }}>
+            Weitere Eingabe
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-lg">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-foreground">Veranstaltungen — Formular</h1>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
+          <div className="space-y-2">
+            <Label htmlFor="titel">Titel der Veranstaltung</Label>
+            <Input
+              id="titel"
+              placeholder=""
+              value={fields.titel ?? ''}
+              onChange={e => setFields(f => ({ ...f, titel: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="beschreibung_veranstaltung">Beschreibung</Label>
+            <Textarea
+              id="beschreibung_veranstaltung"
+              placeholder=""
+              value={fields.beschreibung_veranstaltung ?? ''}
+              onChange={e => setFields(f => ({ ...f, beschreibung_veranstaltung: e.target.value }))}
+              rows={3}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kategorie">Kategorie</Label>
+            <Select
+              value={lookupKey(fields.kategorie) ?? ''}
+              onValueChange={v => setFields(f => ({ ...f, kategorie: v === 'none' ? undefined : v as any }))}
+            >
+              <SelectTrigger id="kategorie"><SelectValue placeholder="" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">—</SelectItem>
+                <SelectItem value="gesundheit">Gesundheit & Prävention</SelectItem>
+                <SelectItem value="sport">Sport & Bewegung</SelectItem>
+                <SelectItem value="ernaehrung">Ernährung</SelectItem>
+                <SelectItem value="entspannung">Entspannung & Achtsamkeit</SelectItem>
+                <SelectItem value="beratung">Beratung & Information</SelectItem>
+                <SelectItem value="sonstiges">Sonstiges</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="beginn">Beginn (Datum & Uhrzeit)</Label>
+            <DatePicker
+              id="beginn"
+              placeholder=""
+              mode="datetime"
+              value={fields.beginn ?? null}
+              onChange={v => setFields(f => ({ ...f, beginn: v ?? undefined }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ende">Ende (Datum & Uhrzeit)</Label>
+            <DatePicker
+              id="ende"
+              placeholder=""
+              mode="datetime"
+              value={fields.ende ?? null}
+              onChange={v => setFields(f => ({ ...f, ende: v ?? undefined }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="anmeldefrist">Anmeldefrist</Label>
+            <DatePicker
+              id="anmeldefrist"
+              placeholder=""
+              mode="date"
+              value={fields.anmeldefrist ?? null}
+              onChange={v => setFields(f => ({ ...f, anmeldefrist: v ?? undefined }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="veranstaltungsort_name">Name des Veranstaltungsorts</Label>
+            <Input
+              id="veranstaltungsort_name"
+              placeholder=""
+              value={fields.veranstaltungsort_name ?? ''}
+              onChange={e => setFields(f => ({ ...f, veranstaltungsort_name: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="veranstaltungsort_strasse">Straße</Label>
+            <Input
+              id="veranstaltungsort_strasse"
+              placeholder=""
+              value={fields.veranstaltungsort_strasse ?? ''}
+              onChange={e => setFields(f => ({ ...f, veranstaltungsort_strasse: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="veranstaltungsort_hausnummer">Hausnummer</Label>
+            <Input
+              id="veranstaltungsort_hausnummer"
+              placeholder=""
+              value={fields.veranstaltungsort_hausnummer ?? ''}
+              onChange={e => setFields(f => ({ ...f, veranstaltungsort_hausnummer: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="veranstaltungsort_plz">Postleitzahl</Label>
+            <Input
+              id="veranstaltungsort_plz"
+              placeholder=""
+              value={fields.veranstaltungsort_plz ?? ''}
+              onChange={e => setFields(f => ({ ...f, veranstaltungsort_plz: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="veranstaltungsort_ort">Ort</Label>
+            <Input
+              id="veranstaltungsort_ort"
+              placeholder=""
+              value={fields.veranstaltungsort_ort ?? ''}
+              onChange={e => setFields(f => ({ ...f, veranstaltungsort_ort: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="veranstaltungsort_geo">Standort auf der Karte</Label>
+            <div className="space-y-3">
+              <Button type="button" variant="outline" className="w-full" disabled={locating} onClick={() => geoLocate("veranstaltungsort_geo")}>
+                {locating ? <IconLoader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <IconCrosshair className="h-4 w-4 mr-1.5" />}
+                Aktuellen Standort verwenden
+              </Button>
+              {geoFromPhoto && fields.veranstaltungsort_geo && (
+                <p className="text-xs text-primary italic">Standort aus Foto übernommen</p>
+              )}
+              {fields.veranstaltungsort_geo?.info && (
+                <p className="text-sm text-muted-foreground break-words whitespace-normal">
+                  {fields.veranstaltungsort_geo.info}
+                </p>
+              )}
+              {fields.veranstaltungsort_geo?.lat != null && fields.veranstaltungsort_geo?.long != null && (
+                <GeoMapPicker
+                  lat={fields.veranstaltungsort_geo.lat}
+                  lng={fields.veranstaltungsort_geo.long}
+                  onChange={(lat, lng) => handleMapMove("veranstaltungsort_geo", lat, lng)}
+                />
+              )}
+              <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors" onClick={() => setShowCoords(v => !v)}>
+                {showCoords ? 'Koordinaten verbergen' : 'Koordinaten anzeigen'}
+                <IconChevronDown className={`h-3 w-3 transition-transform ${showCoords ? "rotate-180" : ""}`} />
+              </button>
+              {showCoords && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Breitengrad</Label>
+                    <Input type="number" step="any"
+                      value={fields.veranstaltungsort_geo?.lat ?? ''}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setFields(f => ({ ...f, veranstaltungsort_geo: { ...(f.veranstaltungsort_geo as any ?? {}), lat: v ? Number(v) : undefined } }));
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Längengrad</Label>
+                    <Input type="number" step="any"
+                      value={fields.veranstaltungsort_geo?.long ?? ''}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setFields(f => ({ ...f, veranstaltungsort_geo: { ...(f.veranstaltungsort_geo as any ?? {}), long: v ? Number(v) : undefined } }));
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="max_teilnehmer">Maximale Teilnehmerzahl</Label>
+            <Input
+              id="max_teilnehmer"
+              type="number"
+              step="any"
+              min={0}
+              placeholder=""
+              value={fields.max_teilnehmer ?? ''}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, max_teilnehmer: n })); }}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kosten">Kosten / Eintritt</Label>
+            <Input
+              id="kosten"
+              placeholder=""
+              value={fields.kosten ?? ''}
+              onChange={e => setFields(f => ({ ...f, kosten: e.target.value }))}
+            />
+          </div>
+
+          <altcha-widget
+            ref={captchaRef as any}
+            challengeurl={`${PROXY_BASE}/api/_challenge?path=${encodeURIComponent(SUBMIT_PATH)}`}
+            auto="onsubmit"
+            hidefooter
+          />
+
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 rounded-lg p-3">
+              {error}
+            </div>
+          )}
+
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? 'Wird gesendet...' : 'Absenden'}
+          </Button>
+        </form>
+
+        <p className="text-xs text-muted-foreground text-center mt-4">
+          Powered by Klar
+        </p>
+      </div>
+    </div>
+  );
+}

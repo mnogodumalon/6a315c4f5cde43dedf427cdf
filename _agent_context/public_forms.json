@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "forms": [
+    {
+      "entity": "veranstalter",
+      "app_id": "6a315b1e3b0ba0a7a2d28905",
+      "path": "/rest/apps/6a315b1e3b0ba0a7a2d28905/records",
+      "allowed_fields": [
+        "organisation_name",
+        "organisation_typ",
+        "ansprechpartner_vorname",
+        "ansprechpartner_nachname",
+        "email",
+        "telefon",
+        "strasse",
+        "hausnummer",
+        "plz",
+        "ort",
+        "website",
+        "beschreibung"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Veranstalter — Formular"
+    },
+    {
+      "entity": "veranstaltungen",
+      "app_id": "6a315b225049324bae74cc15",
+      "path": "/rest/apps/6a315b225049324bae74cc15/records",
+      "allowed_fields": [
+        "titel",
+        "beschreibung_veranstaltung",
+        "kategorie",
+        "beginn",
+        "ende",
+        "anmeldefrist",
+        "veranstaltungsort_name",
+        "veranstaltungsort_strasse",
+        "veranstaltungsort_hausnummer",
+        "veranstaltungsort_plz",
+        "veranstaltungsort_ort",
+        "veranstaltungsort_geo",
+        "max_teilnehmer",
+        "kosten"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Veranstaltungen — Formular"
+    },
+    {
+      "entity": "anmeldungen",
+      "app_id": "6a315b23fe1f8743a7f9aaff",
+      "path": "/rest/apps/6a315b23fe1f8743a7f9aaff/records",
+      "allowed_fields": [
+        "vorname",
+        "nachname",
+        "email_anmeldung",
+        "telefon_anmeldung",
+        "anzahl_personen",
+        "anmerkungen",
+        "email_benachrichtigung"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Anmeldungen — Formular"
+    }
+  ]
+}

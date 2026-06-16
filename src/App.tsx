@@ -6,7 +6,6 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ErrorBusProvider } from '@/components/ErrorBus';
 import { Layout } from '@/components/Layout';
 import DashboardOverview from '@/pages/DashboardOverview';
-import { WorkflowPlaceholders } from '@/components/WorkflowPlaceholders';
 import AdminPage from '@/pages/AdminPage';
 import VeranstalterPage from '@/pages/VeranstalterPage';
 import VeranstalterDetailPage from '@/pages/VeranstalterDetailPage';
@@ -20,6 +19,7 @@ import PublicFormAnmeldungen from '@/pages/public/PublicForm_Anmeldungen';
 // <public:imports>
 // </public:imports>
 // <custom:imports>
+const GruppenAnmeldungPage = lazy(() => import('@/pages/intents/GruppenAnmeldungPage'));
 // </custom:imports>
 
 export default function App() {
@@ -35,7 +35,7 @@ export default function App() {
               {/* <public:routes> */}
               {/* </public:routes> */}
               <Route element={<Layout />}>
-                <Route index element={<><div className="mb-8"><WorkflowPlaceholders /></div><DashboardOverview /></>} />
+                <Route index element={<DashboardOverview />} />
                 <Route path="veranstalter" element={<VeranstalterPage />} />
                 <Route path="veranstalter/:id" element={<VeranstalterDetailPage />} />
                 <Route path="veranstaltungen" element={<VeranstaltungenPage />} />
@@ -44,6 +44,7 @@ export default function App() {
                 <Route path="anmeldungen/:id" element={<AnmeldungenDetailPage />} />
                 <Route path="admin" element={<AdminPage />} />
                 {/* <custom:routes> */}
+                <Route path="intents/gruppen-anmeldung" element={<Suspense fallback={null}><GruppenAnmeldungPage /></Suspense>} />
                 {/* </custom:routes> */}
               </Route>
             </Routes>

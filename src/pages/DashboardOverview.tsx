@@ -4,7 +4,7 @@ import type { EnrichedVeranstaltungen, EnrichedAnmeldungen } from '@/types/enric
 import type { Veranstalter } from '@/types/app';
 import { APP_IDS, LOOKUP_OPTIONS } from '@/types/app';
 import { LivingAppsService, createRecordUrl, extractRecordId } from '@/services/livingAppsService';
-import { formatDate, formatDateTime, displayLookup } from '@/lib/formatters';
+import { formatDateTime } from '@/lib/formatters';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
 import { useState, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -76,7 +76,7 @@ export default function DashboardOverview() {
 
   const [activeTab, setActiveTab] = useState<TabView>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedKategorie, setSelectedKategorie] = useState<string>('all');
+  const [selectedKategorien, setSelectedKategorien] = useState<string[]>([]);
 
   // Dialogs
   const [veranstaltungDialogOpen, setVeranstaltungDialogOpen] = useState(false);
@@ -114,8 +114,8 @@ export default function DashboardOverview() {
 
   const filteredVeranstaltungen = useMemo(() => {
     let list = activeTab === 'upcoming' ? upcomingVeranstaltungen : enrichedVeranstaltungen;
-    if (selectedKategorie !== 'all') {
-      list = list.filter(v => v.fields.kategorie?.key === selectedKategorie);
+    if (selectedKategorien.length > 0) {
+      list = list.filter(v => selectedKategorien.includes(v.fields.kategorie?.key ?? ''));
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -126,7 +126,7 @@ export default function DashboardOverview() {
       );
     }
     return list;
-  }, [activeTab, upcomingVeranstaltungen, enrichedVeranstaltungen, selectedKategorie, searchQuery]);
+  }, [activeTab, upcomingVeranstaltungen, enrichedVeranstaltungen, selectedKategorien, searchQuery]);
 
   const anmeldungenByVeranstaltung = useMemo(() => {
     const m = new Map<string, EnrichedAnmeldungen[]>();
@@ -253,9 +253,9 @@ export default function DashboardOverview() {
             </div>
             <div className="flex flex-wrap gap-1.5">
               <button
-                onClick={() => setSelectedKategorie('all')}
+                onClick={() => setSelectedKategorien([])}
                 className={`px-3 py-1.5 text-xs rounded-full font-medium transition-colors ${
-                  selectedKategorie === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent'
+                  selectedKategorien.length === 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent'
                 }`}
               >
                 Alle
@@ -263,9 +263,15 @@ export default function DashboardOverview() {
               {LOOKUP_OPTIONS.veranstaltungen?.kategorie?.map(opt => (
                 <button
                   key={opt.key}
-                  onClick={() => setSelectedKategorie(opt.key)}
+                  onClick={() =>
+                    setSelectedKategorien(prev =>
+                      prev.includes(opt.key)
+                        ? prev.filter(k => k !== opt.key)
+                        : [...prev, opt.key]
+                    )
+                  }
                   className={`px-3 py-1.5 text-xs rounded-full font-medium transition-colors ${
-                    selectedKategorie === opt.key
+                    selectedKategorien.includes(opt.key)
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:bg-accent'
                   }`}

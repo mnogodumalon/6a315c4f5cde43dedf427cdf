@@ -38,10 +38,8 @@ import {
   IconMapPin,
   IconClock,
   IconBuildingStore,
-  IconList,
   IconSearch,
   IconX,
-  IconTag,
   IconMoneybag,
   IconUserPlus,
   IconChevronDown,
@@ -53,7 +51,42 @@ import {
 const APPGROUP_ID = '6a315c4f5cde43dedf427cdf';
 const REPAIR_ENDPOINT = '/claude/build/repair';
 
-type TabView = 'upcoming' | 'all' | 'veranstalter';
+type TabView = 'upcoming' | 'all' | 'veranstalter' | 'terminplan';
+
+function getBundesland(plz?: string): string | null {
+  if (!plz || plz.length < 2) return null;
+  const p = plz.slice(0, 2);
+  const m: Record<string, string> = {
+    '01': 'Sachsen', '02': 'Sachsen', '03': 'Brandenburg', '04': 'Sachsen',
+    '06': 'Sachsen-Anhalt', '07': 'Thüringen', '08': 'Sachsen', '09': 'Sachsen',
+    '10': 'Berlin', '11': 'Berlin', '12': 'Berlin', '13': 'Berlin',
+    '14': 'Brandenburg', '15': 'Brandenburg', '16': 'Brandenburg',
+    '17': 'Mecklenburg-Vorpommern', '18': 'Mecklenburg-Vorpommern', '19': 'Mecklenburg-Vorpommern',
+    '20': 'Hamburg', '21': 'Niedersachsen', '22': 'Hamburg',
+    '23': 'Schleswig-Holstein', '24': 'Schleswig-Holstein', '25': 'Schleswig-Holstein',
+    '26': 'Niedersachsen', '27': 'Niedersachsen', '28': 'Bremen', '29': 'Niedersachsen',
+    '30': 'Niedersachsen', '31': 'Niedersachsen', '32': 'Nordrhein-Westfalen',
+    '33': 'Nordrhein-Westfalen', '34': 'Hessen', '35': 'Hessen', '36': 'Hessen',
+    '37': 'Niedersachsen', '38': 'Niedersachsen', '39': 'Sachsen-Anhalt',
+    '40': 'Nordrhein-Westfalen', '41': 'Nordrhein-Westfalen', '42': 'Nordrhein-Westfalen',
+    '44': 'Nordrhein-Westfalen', '45': 'Nordrhein-Westfalen', '46': 'Nordrhein-Westfalen',
+    '47': 'Nordrhein-Westfalen', '48': 'Nordrhein-Westfalen', '49': 'Niedersachsen',
+    '50': 'Nordrhein-Westfalen', '51': 'Nordrhein-Westfalen', '52': 'Nordrhein-Westfalen',
+    '53': 'Nordrhein-Westfalen', '54': 'Rheinland-Pfalz', '55': 'Rheinland-Pfalz',
+    '56': 'Rheinland-Pfalz', '57': 'Nordrhein-Westfalen', '58': 'Nordrhein-Westfalen',
+    '59': 'Nordrhein-Westfalen', '60': 'Hessen', '61': 'Hessen', '63': 'Hessen',
+    '64': 'Hessen', '65': 'Hessen', '66': 'Saarland', '67': 'Rheinland-Pfalz',
+    '68': 'Baden-Württemberg', '69': 'Baden-Württemberg', '70': 'Baden-Württemberg',
+    '71': 'Baden-Württemberg', '72': 'Baden-Württemberg', '73': 'Baden-Württemberg',
+    '74': 'Baden-Württemberg', '75': 'Baden-Württemberg', '76': 'Baden-Württemberg',
+    '77': 'Baden-Württemberg', '78': 'Baden-Württemberg', '79': 'Baden-Württemberg',
+    '80': 'Bayern', '81': 'Bayern', '82': 'Bayern', '83': 'Bayern', '84': 'Bayern',
+    '85': 'Bayern', '86': 'Bayern', '87': 'Bayern', '88': 'Bayern', '89': 'Bayern',
+    '90': 'Bayern', '91': 'Bayern', '92': 'Bayern', '93': 'Bayern', '94': 'Bayern',
+    '95': 'Bayern', '96': 'Bayern', '97': 'Bayern', '98': 'Thüringen', '99': 'Thüringen',
+  };
+  return m[p] ?? null;
+}
 
 const KATEGORIE_COLORS: Record<string, string> = {
   gesundheit: 'bg-emerald-100 text-emerald-700',
@@ -77,6 +110,7 @@ export default function DashboardOverview() {
   const [activeTab, setActiveTab] = useState<TabView>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKategorien, setSelectedKategorien] = useState<string[]>([]);
+  const [selectedBundesland, setSelectedBundesland] = useState<string | null>(null);
 
   // Dialogs
   const [veranstaltungDialogOpen, setVeranstaltungDialogOpen] = useState(false);
@@ -138,6 +172,42 @@ export default function DashboardOverview() {
     });
     return m;
   }, [enrichedAnmeldungen]);
+
+  // Terminplan: alle events sortiert nach Datum, optional nach Bundesland gefiltert
+  const availableBundeslaender = useMemo(() => {
+    const s = new Set<string>();
+    enrichedVeranstaltungen.forEach(v => {
+      const bl = getBundesland(v.fields.veranstaltungsort_plz);
+      if (bl) s.add(bl);
+    });
+    return Array.from(s).sort();
+  }, [enrichedVeranstaltungen]);
+
+  const terminplanEvents = useMemo(() => {
+    let list = [...enrichedVeranstaltungen].sort((a, b) =>
+      (a.fields.beginn ?? '').localeCompare(b.fields.beginn ?? '')
+    );
+    if (selectedBundesland) {
+      list = list.filter(v => getBundesland(v.fields.veranstaltungsort_plz) === selectedBundesland);
+    }
+    return list;
+  }, [enrichedVeranstaltungen, selectedBundesland]);
+
+  // Terminplan nach Monat gruppieren
+  const terminplanByMonth = useMemo(() => {
+    const groups: { monthKey: string; label: string; events: EnrichedVeranstaltungen[] }[] = [];
+    terminplanEvents.forEach(v => {
+      const date = v.fields.beginn ? new Date(v.fields.beginn) : null;
+      const key = date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` : 'unbekannt';
+      const label = date
+        ? date.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })
+        : 'Ohne Datum';
+      let group = groups.find(g => g.monthKey === key);
+      if (!group) { group = { monthKey: key, label, events: [] }; groups.push(group); }
+      group.events.push(v);
+    });
+    return groups;
+  }, [terminplanEvents]);
 
   // Handlers
   const handleCreateVeranstaltung = async (fields: Veranstaltungen['fields']) => {
@@ -217,7 +287,7 @@ export default function DashboardOverview() {
       </div>
       {/* Haupt-Tabs */}
       <div className="flex flex-wrap gap-2 items-center border-b border-border pb-0">
-        {(['upcoming', 'all', 'veranstalter'] as TabView[]).map(tab => (
+        {(['upcoming', 'all', 'terminplan', 'veranstalter'] as TabView[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -227,12 +297,157 @@ export default function DashboardOverview() {
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            {tab === 'upcoming' ? 'Bevorstehende' : tab === 'all' ? 'Alle Veranstaltungen' : 'Veranstalter'}
+            {tab === 'upcoming' ? 'Bevorstehende' : tab === 'all' ? 'Alle' : tab === 'terminplan' ? 'Terminplan' : 'Veranstalter'}
           </button>
         ))}
       </div>
 
-      {activeTab !== 'veranstalter' ? (
+      {activeTab === 'terminplan' ? (
+        /* ── Terminplan ──────────────────────────────────────────────────── */
+        <div className="space-y-4">
+          {/* Bundesland-Filter */}
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-xs font-medium text-muted-foreground mr-1 flex items-center gap-1">
+              <IconMapPin size={13} className="shrink-0" />Bundesland:
+            </span>
+            <button
+              onClick={() => setSelectedBundesland(null)}
+              className={`px-3 py-1.5 text-xs rounded-full font-medium transition-colors ${
+                selectedBundesland === null ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent'
+              }`}
+            >
+              Alle
+            </button>
+            {availableBundeslaender.length === 0 ? (
+              <span className="text-xs text-muted-foreground italic">
+                (Keine PLZ-Daten vorhanden — bitte PLZ bei Veranstaltungen eintragen)
+              </span>
+            ) : (
+              availableBundeslaender.map(bl => (
+                <button
+                  key={bl}
+                  onClick={() => setSelectedBundesland(prev => prev === bl ? null : bl)}
+                  className={`px-3 py-1.5 text-xs rounded-full font-medium transition-colors ${
+                    selectedBundesland === bl ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent'
+                  }`}
+                >
+                  {bl}
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* Terminplan-Tabelle */}
+          {terminplanByMonth.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+              <IconCalendar size={48} className="text-muted-foreground/40" stroke={1.5} />
+              <p className="text-muted-foreground text-sm">Keine Veranstaltungen gefunden</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {terminplanByMonth.map(group => (
+                <div key={group.monthKey}>
+                  <h3 className="text-sm font-semibold text-foreground mb-2 px-1">{group.label}</h3>
+                  <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/40">
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">Datum</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Veranstaltung</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">Ort</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap hidden md:table-cell">Bundesland</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap hidden lg:table-cell">Kategorie</th>
+                            <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">Plätze</th>
+                            <th className="px-2 py-2.5"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {group.events.map(v => {
+                            const veranstAnmeldungen = anmeldungenByVeranstaltung.get(v.record_id) ?? [];
+                            const totalPersonen = veranstAnmeldungen.reduce((s, a) => s + (a.fields.anzahl_personen ?? 1), 0);
+                            const katKey = v.fields.kategorie?.key ?? 'sonstiges';
+                            const katColor = KATEGORIE_COLORS[katKey] ?? KATEGORIE_COLORS.sonstiges;
+                            const bl = getBundesland(v.fields.veranstaltungsort_plz);
+                            const date = v.fields.beginn ? new Date(v.fields.beginn) : null;
+                            const dateStr = date
+                              ? date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+                              : '—';
+                            const timeStr = date
+                              ? date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr'
+                              : '';
+                            const auslastung = v.fields.max_teilnehmer
+                              ? Math.min(100, Math.round((totalPersonen / v.fields.max_teilnehmer) * 100))
+                              : null;
+                            return (
+                              <tr
+                                key={v.record_id}
+                                className="hover:bg-accent/30 cursor-pointer transition-colors"
+                                onClick={() => veranstaltungOverlay.replace(v)}
+                              >
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <span className="font-medium text-foreground">{dateStr}</span>
+                                  {timeStr && <span className="block text-xs text-muted-foreground">{timeStr}</span>}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="font-medium text-foreground truncate block max-w-[200px]">{v.fields.titel ?? '(kein Titel)'}</span>
+                                  {v.veranstalterName && <span className="text-xs text-muted-foreground truncate block">{v.veranstalterName}</span>}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap hidden sm:table-cell">
+                                  <span className="text-muted-foreground truncate block max-w-[140px]">
+                                    {v.fields.veranstaltungsort_ort || '—'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap hidden md:table-cell">
+                                  <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${bl ? 'bg-muted text-foreground' : 'text-muted-foreground'}`}>
+                                    {bl ?? '—'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap hidden lg:table-cell">
+                                  {v.fields.kategorie && (
+                                    <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${katColor}`}>
+                                      {v.fields.kategorie.label}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                  {v.fields.max_teilnehmer ? (
+                                    <div className="flex flex-col items-end gap-1">
+                                      <span className={`text-xs font-medium ${auslastung !== null && auslastung >= 90 ? 'text-destructive' : 'text-foreground'}`}>
+                                        {totalPersonen}/{v.fields.max_teilnehmer}
+                                      </span>
+                                      <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">
+                                        <div
+                                          className={`h-full rounded-full ${auslastung !== null && auslastung >= 90 ? 'bg-destructive' : auslastung !== null && auslastung >= 70 ? 'bg-amber-500' : 'bg-primary'}`}
+                                          style={{ width: `${auslastung ?? 0}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">{totalPersonen} Anm.</span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-3">
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setEditingVeranstaltung(v); setVeranstaltungDialogOpen(true); }}
+                                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                                  >
+                                    <IconPencil size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : activeTab !== 'veranstalter' ? (
         <div className="space-y-4">
           {/* Such- und Filterzeile */}
           <div className="flex flex-wrap gap-2 items-center">

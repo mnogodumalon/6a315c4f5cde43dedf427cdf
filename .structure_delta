@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "changes": [
+    {
+      "kind": "label_changed",
+      "scope": "field",
+      "entity": "anmeldungen",
+      "field": "telefon_anmeldung",
+      "old_label": "Telefonnummer (optional)",
+      "new_label": "Telefonnummer"
+    }
+  ],
+  "counts": {
+    "label_changed": 1
+  },
+  "harmless_only": true
+}

@@ -124,7 +124,7 @@ export const LOOKUP_OPTIONS: Record<string, Record<string, {key: string, label: 
     kategorie: [{ key: "gesundheit", get label() { return lookupLabel('veranstaltungen', 'kategorie', "gesundheit") ?? "Gesundheit & Prävention"; } }, { key: "sport", get label() { return lookupLabel('veranstaltungen', 'kategorie', "sport") ?? "Sport & Bewegung"; } }, { key: "ernaehrung", get label() { return lookupLabel('veranstaltungen', 'kategorie', "ernaehrung") ?? "Ernährung"; } }, { key: "entspannung", get label() { return lookupLabel('veranstaltungen', 'kategorie', "entspannung") ?? "Entspannung & Achtsamkeit"; } }, { key: "beratung", get label() { return lookupLabel('veranstaltungen', 'kategorie', "beratung") ?? "Beratung & Information"; } }, { key: "sonstiges", get label() { return lookupLabel('veranstaltungen', 'kategorie', "sonstiges") ?? "Sonstiges"; } }],
   },
   'veranstalter': {
-    organisation_typ: [{ key: "verein", get label() { return lookupLabel('veranstalter', 'organisation_typ', "verein") ?? "Verein"; } }, { key: "kommune", get label() { return lookupLabel('veranstalter', 'organisation_typ', "kommune") ?? "Kommune"; } }, { key: "sonstige", get label() { return lookupLabel('veranstalter', 'organisation_typ', "sonstige") ?? "Sonstige Organisation"; } }],
+    organisation_typ: [{ key: "kommune", get label() { return lookupLabel('veranstalter', 'organisation_typ', "kommune") ?? "Kommune"; } }, { key: "verein", get label() { return lookupLabel('veranstalter', 'organisation_typ', "verein") ?? "Verein"; } }, { key: "sonstige", get label() { return lookupLabel('veranstalter', 'organisation_typ', "sonstige") ?? "Sonstige Organisation"; } }],
   },
 };
 

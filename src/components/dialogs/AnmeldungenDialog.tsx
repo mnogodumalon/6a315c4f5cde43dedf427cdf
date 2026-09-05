@@ -106,7 +106,7 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
     setCreateVeranstaltungenOpen(true);
   }
   const [showErrors, setShowErrors] = useState(false);
-  const REQUIRED_FIELDS = ['veranstaltung', 'vorname', 'nachname', 'email_anmeldung', 'anzahl_personen'] as const;
+  const REQUIRED_FIELDS = ['veranstaltung', 'vorname', 'nachname', 'email_anmeldung', 'telefon_anmeldung', 'anzahl_personen'] as const;
   const missingRequired = REQUIRED_FIELDS.filter(k => {
     const v = (fields as Record<string, unknown>)[k];
     return v == null || v === '' || (Array.isArray(v) && v.length === 0);
@@ -261,7 +261,7 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
         }
       }
       const photoContext = contextParts.length ? contextParts.join('\n') : undefined;
-      const schema = `{\n  "veranstaltung": string | null, // Display name from Veranstaltungen (see <available-records>)\n  "vorname": string | null, // Vorname\n  "nachname": string | null, // Nachname\n  "email_anmeldung": string | null, // E-Mail-Adresse\n  "telefon_anmeldung": string | null, // Telefonnummer (optional)\n  "anzahl_personen": number | null, // Anzahl der Personen\n  "anmerkungen": string | null, // Anmerkungen\n  "email_benachrichtigung": boolean | null, // Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden.\n}`;
+      const schema = `{\n  "veranstaltung": string | null, // Display name from Veranstaltungen (see <available-records>)\n  "vorname": string | null, // Vorname\n  "nachname": string | null, // Nachname\n  "email_anmeldung": string | null, // E-Mail-Adresse\n  "telefon_anmeldung": string | null, // Telefonnummer\n  "anzahl_personen": number | null, // Anzahl der Personen\n  "anmerkungen": string | null, // Anmerkungen\n  "email_benachrichtigung": boolean | null, // Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden.\n}`;
       const raw = await extractFromInput<Record<string, unknown>>(schema, {
         dataUri: uri,
         userText: aiText.trim() || undefined,
@@ -397,12 +397,15 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
     ),
     'telefon_anmeldung': (
       <div key="telefon_anmeldung" className="space-y-1.5">
-        <Label htmlFor="telefon_anmeldung">{fieldLabel('anmeldungen', 'telefon_anmeldung')}</Label>
+        <Label htmlFor="telefon_anmeldung">{fieldLabel('anmeldungen', 'telefon_anmeldung')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="telefon_anmeldung"
           value={fields.telefon_anmeldung ?? ''}
           onChange={e => setFields(f => ({ ...f, telefon_anmeldung: e.target.value }))}
         />
+        {showErrors && !fields.telefon_anmeldung && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'anzahl_personen': (
@@ -461,7 +464,7 @@ export function AnmeldungenDialog({ open, onClose, onSubmit, defaultValues, reco
   //     kein passendes Backend-Feld in orderedFields) erscheinen NICHT als
   //     Input, sondern unten als kompakte 'Berechnungen'-Übersicht oder als
   //     Inline-Hint unter dem letzten beitragenden Input.
-  const FIELD_LABELS: Record<string, string> = {"veranstaltung": "Veranstaltung", "vorname": "Vorname", "nachname": "Nachname", "email_anmeldung": "E-Mail-Adresse", "telefon_anmeldung": "Telefonnummer (optional)", "anzahl_personen": "Anzahl der Personen", "anmerkungen": "Anmerkungen", "email_benachrichtigung": "Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden."};
+  const FIELD_LABELS: Record<string, string> = {"veranstaltung": "Veranstaltung", "vorname": "Vorname", "nachname": "Nachname", "email_anmeldung": "E-Mail-Adresse", "telefon_anmeldung": "Telefonnummer", "anzahl_personen": "Anzahl der Personen", "anmerkungen": "Anmerkungen", "email_benachrichtigung": "Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden."};
   const CURRENCY_KEYS = new Set<string>([]);
   // Applookup-Referenz-Labels: pro applookup-Feld in dieser Form (ownKey)
   // eine Map { lookupKey: label } für ALLE Felder des Target-Schemas. Wird

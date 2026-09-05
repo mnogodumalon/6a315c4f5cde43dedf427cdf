@@ -241,7 +241,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
         }
       }
       const photoContext = contextParts.length ? contextParts.join('\n') : undefined;
-      const schema = `{\n  "organisation_name": string | null, // Name der Organisation\n  "organisation_typ": LookupValue | null, // Typ der Organisation (select one key: "verein" | "kommune" | "sonstige") mapping: verein=Verein, kommune=Kommune, sonstige=Sonstige Organisation\n  "ansprechpartner_vorname": string | null, // Vorname Ansprechpartner\n  "ansprechpartner_nachname": string | null, // Nachname Ansprechpartner\n  "email": string | null, // E-Mail-Adresse\n  "telefon": string | null, // Telefonnummer\n  "strasse": string | null, // Straße\n  "hausnummer": string | null, // Hausnummer\n  "plz": string | null, // Postleitzahl\n  "ort": string | null, // Ort\n  "website": string | null, // Website\n  "beschreibung": string | null, // Beschreibung der Organisation\n}`;
+      const schema = `{\n  "organisation_name": string | null, // Name der Organisation\n  "organisation_typ": LookupValue | null, // Typ der Organisation (select one key: "kommune" | "verein" | "sonstige") mapping: kommune=Kommune, verein=Verein, sonstige=Sonstige Organisation\n  "ansprechpartner_vorname": string | null, // Vorname Ansprechpartner\n  "ansprechpartner_nachname": string | null, // Nachname Ansprechpartner\n  "email": string | null, // E-Mail-Adresse\n  "telefon": string | null, // Telefonnummer\n  "strasse": string | null, // Straße\n  "hausnummer": string | null, // Hausnummer\n  "plz": string | null, // Postleitzahl\n  "ort": string | null, // Ort\n  "website": string | null, // Website\n  "beschreibung": string | null, // Beschreibung der Organisation\n}`;
       const raw = await extractFromInput<Record<string, unknown>>(schema, {
         dataUri: uri,
         userText: aiText.trim() || undefined,
@@ -325,19 +325,6 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
           <button
             type="button"
             role="radio"
-            aria-checked={lookupKey(fields.organisation_typ) === 'verein'}
-            onClick={() => setFields(f => ({ ...f, organisation_typ: (lookupKey(f.organisation_typ) === 'verein' ? undefined : 'verein') as any }))}
-            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-              lookupKey(fields.organisation_typ) === 'verein'
-                ? 'bg-foreground text-background border-foreground'
-                : 'bg-background text-foreground border-input hover:bg-accent'
-            }`}
-          >
-            {lookupLabel('veranstalter', 'organisation_typ', 'verein') ?? 'Verein'}
-          </button>
-          <button
-            type="button"
-            role="radio"
             aria-checked={lookupKey(fields.organisation_typ) === 'kommune'}
             onClick={() => setFields(f => ({ ...f, organisation_typ: (lookupKey(f.organisation_typ) === 'kommune' ? undefined : 'kommune') as any }))}
             className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -347,6 +334,19 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
             }`}
           >
             {lookupLabel('veranstalter', 'organisation_typ', 'kommune') ?? 'Kommune'}
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.organisation_typ) === 'verein'}
+            onClick={() => setFields(f => ({ ...f, organisation_typ: (lookupKey(f.organisation_typ) === 'verein' ? undefined : 'verein') as any }))}
+            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.organisation_typ) === 'verein'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            {lookupLabel('veranstalter', 'organisation_typ', 'verein') ?? 'Verein'}
           </button>
           <button
             type="button"

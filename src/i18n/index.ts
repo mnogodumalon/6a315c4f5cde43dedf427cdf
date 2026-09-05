@@ -937,8 +937,8 @@ export const LABELS: Record<CoreLocale, LabelBundle> = {
         },
         "lookups": {
           "organisation_typ": {
-            "verein": "Verein",
             "kommune": "Kommune",
+            "verein": "Verein",
             "sonstige": "Sonstige Organisation"
           }
         }
@@ -951,7 +951,7 @@ export const LABELS: Record<CoreLocale, LabelBundle> = {
           "vorname": "Vorname",
           "nachname": "Nachname",
           "email_anmeldung": "E-Mail-Adresse",
-          "telefon_anmeldung": "Telefonnummer (optional)",
+          "telefon_anmeldung": "Telefonnummer",
           "anzahl_personen": "Anzahl der Personen",
           "anmerkungen": "Anmerkungen",
           "email_benachrichtigung": "Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden."
@@ -967,7 +967,7 @@ export const LABELS: Record<CoreLocale, LabelBundle> = {
         "name": "Events",
         "app_id": "6a315b225049324bae74cc15",
         "fields": {
-          "veranstalter": "Organizer (E-Mail Address)",
+          "veranstalter": "Organizer (Email Address)",
           "titel": "Event Title",
           "beschreibung_veranstaltung": "Description",
           "kategorie": "Category",
@@ -981,7 +981,7 @@ export const LABELS: Record<CoreLocale, LabelBundle> = {
           "veranstaltungsort_ort": "City",
           "veranstaltungsort_geo": "Location on Map",
           "max_teilnehmer": "Maximum Number of Participants",
-          "kosten": "Costs / Admission",
+          "kosten": "Cost / Admission",
           "flyer": "Image / Flyer"
         },
         "lookups": {
@@ -990,7 +990,7 @@ export const LABELS: Record<CoreLocale, LabelBundle> = {
             "sport": "Sports & Exercise",
             "ernaehrung": "Nutrition",
             "entspannung": "Relaxation & Mindfulness",
-            "beratung": "Counseling & Information",
+            "beratung": "Advice & Information",
             "sonstiges": "Other"
           }
         }
@@ -1001,9 +1001,9 @@ export const LABELS: Record<CoreLocale, LabelBundle> = {
         "fields": {
           "organisation_name": "Organization Name",
           "organisation_typ": "Organization Type",
-          "ansprechpartner_vorname": "First Name Contact Person",
-          "ansprechpartner_nachname": "Last Name Contact Person",
-          "email": "E-Mail Address",
+          "ansprechpartner_vorname": "Contact First Name",
+          "ansprechpartner_nachname": "Contact Last Name",
+          "email": "Email Address",
           "telefon": "Phone Number",
           "strasse": "Street",
           "hausnummer": "House Number",
@@ -1014,8 +1014,8 @@ export const LABELS: Record<CoreLocale, LabelBundle> = {
         },
         "lookups": {
           "organisation_typ": {
-            "verein": "Club",
             "kommune": "Municipality",
+            "verein": "Association",
             "sonstige": "Other Organization"
           }
         }
@@ -1027,11 +1027,11 @@ export const LABELS: Record<CoreLocale, LabelBundle> = {
           "veranstaltung": "Event",
           "vorname": "First Name",
           "nachname": "Last Name",
-          "email_anmeldung": "E-Mail Address",
-          "telefon_anmeldung": "Phone Number (optional)",
+          "email_anmeldung": "Email Address",
+          "telefon_anmeldung": "Phone Number",
           "anzahl_personen": "Number of Persons",
           "anmerkungen": "Notes",
-          "email_benachrichtigung": "I would like to be informed by e-mail about changes to the event."
+          "email_benachrichtigung": "I would like to be informed about changes to the event by email."
         },
         "lookups": {}
       }

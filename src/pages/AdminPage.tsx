@@ -56,7 +56,7 @@ const VERANSTALTUNGEN_FIELDS = [
 ];
 const VERANSTALTER_FIELDS = [
   { key: 'organisation_name', label: 'Name der Organisation', type: 'string/text' },
-  { key: 'organisation_typ', label: 'Typ der Organisation', type: 'lookup/radio', options: [{ key: 'verein', label: 'Verein' }, { key: 'kommune', label: 'Kommune' }, { key: 'sonstige', label: 'Sonstige Organisation' }] },
+  { key: 'organisation_typ', label: 'Typ der Organisation', type: 'lookup/radio', options: [{ key: 'kommune', label: 'Kommune' }, { key: 'verein', label: 'Verein' }, { key: 'sonstige', label: 'Sonstige Organisation' }] },
   { key: 'ansprechpartner_vorname', label: 'Vorname Ansprechpartner', type: 'string/text' },
   { key: 'ansprechpartner_nachname', label: 'Nachname Ansprechpartner', type: 'string/text' },
   { key: 'email', label: 'E-Mail-Adresse', type: 'string/email' },
@@ -73,7 +73,7 @@ const ANMELDUNGEN_FIELDS = [
   { key: 'vorname', label: 'Vorname', type: 'string/text' },
   { key: 'nachname', label: 'Nachname', type: 'string/text' },
   { key: 'email_anmeldung', label: 'E-Mail-Adresse', type: 'string/email' },
-  { key: 'telefon_anmeldung', label: 'Telefonnummer (optional)', type: 'string/tel' },
+  { key: 'telefon_anmeldung', label: 'Telefonnummer', type: 'string/tel' },
   { key: 'anzahl_personen', label: 'Anzahl der Personen', type: 'number' },
   { key: 'anmerkungen', label: 'Anmerkungen', type: 'string/textarea' },
   { key: 'email_benachrichtigung', label: 'Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden.', type: 'bool' },

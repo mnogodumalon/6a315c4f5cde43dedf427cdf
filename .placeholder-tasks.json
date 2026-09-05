@@ -278,12 +278,12 @@
             "required": true,
             "options": [
               {
-                "key": "verein",
-                "label": "Verein"
-              },
-              {
                 "key": "kommune",
                 "label": "Kommune"
+              },
+              {
+                "key": "verein",
+                "label": "Verein"
               },
               {
                 "key": "sonstige",
@@ -427,9 +427,9 @@
           },
           {
             "key": "telefon_anmeldung",
-            "label": "Telefonnummer (optional)",
+            "label": "Telefonnummer",
             "type": "string/tel",
-            "required": false
+            "required": true
           },
           {
             "key": "anzahl_personen",

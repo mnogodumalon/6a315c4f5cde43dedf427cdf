@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
-import { de } from 'date-fns/locale';
 import { IntentWizardShell } from '@/components/IntentWizardShell';
 import { EntitySelectStep } from '@/components/EntitySelectStep';
 import { BudgetTracker } from '@/components/BudgetTracker';
@@ -22,6 +21,7 @@ import {
   IconAlertTriangle,
   IconCircleCheck,
 } from '@tabler/icons-react';
+import { dateFnsLocale, tx } from '@/i18n';
 
 // --- Types ---
 
@@ -59,7 +59,7 @@ function formatVeranstaltungDate(dateStr: string | undefined): string {
   if (!dateStr) return '';
   try {
     const parsed = parseISO(dateStr);
-    return format(parsed, 'dd. MMMM yyyy, HH:mm', { locale: de }) + ' Uhr';
+    return format(parsed, 'dd. MMMM yyyy, HH:mm', { locale: dateFnsLocale() }) + ' Uhr';
   } catch {
     return dateStr;
   }
@@ -67,13 +67,13 @@ function formatVeranstaltungDate(dateStr: string | undefined): string {
 
 // --- Main Component ---
 
-const WIZARD_STEPS = [
-  { label: 'Veranstaltung' },
-  { label: 'Teilnehmer' },
-  { label: 'Bestätigung' },
+export default function GruppenAnmeldungPage() {
+  const WIZARD_STEPS = [
+  { label: tx('Veranstaltung') },
+  { label: tx('Teilnehmer') },
+  { label: tx('Bestätigung') },
 ];
 
-export default function GruppenAnmeldungPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { veranstaltungen, anmeldungen, loading, error, fetchAll } = useDashboardData();
 
@@ -211,7 +211,7 @@ export default function GruppenAnmeldungPage() {
       await fetchAll();
       setCurrentStep(3);
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Anmeldung fehlgeschlagen. Bitte versuche es erneut.');
+      setSubmitError(err instanceof Error ? err.message : tx('Anmeldung fehlgeschlagen. Bitte versuche es erneut.'));
     } finally {
       setSubmitting(false);
     }
@@ -236,16 +236,16 @@ export default function GruppenAnmeldungPage() {
     return (veranstaltungen as Veranstaltungen[]).map(v => {
       const belegung = registrierungenMap.get(v.record_id) ?? 0;
       const max = v.fields.max_teilnehmer ?? 0;
-      const datumStr = v.fields.beginn ? formatVeranstaltungDate(v.fields.beginn) : 'Kein Datum';
-      const ortStr = v.fields.veranstaltungsort_name ?? 'Kein Veranstaltungsort';
-      const platzInfo = max > 0 ? `${belegung} / ${max} Plätze belegt` : 'Unbegrenzte Plätze';
+      const datumStr = v.fields.beginn ? formatVeranstaltungDate(v.fields.beginn) : tx('Kein Datum');
+      const ortStr = v.fields.veranstaltungsort_name ?? tx('Kein Veranstaltungsort');
+      const platzInfo = max > 0 ? tx`${belegung} / ${max} Plätze belegt` : tx('Unbegrenzte Plätze');
       return {
         id: v.record_id,
-        title: v.fields.titel ?? 'Unbekannte Veranstaltung',
+        title: v.fields.titel ?? tx('Unbekannte Veranstaltung'),
         subtitle: `${datumStr} · ${ortStr}`,
         stats: [
-          { label: 'Plätze', value: platzInfo },
-          ...(v.fields.kosten ? [{ label: 'Kosten', value: v.fields.kosten }] : []),
+          { label: tx('Plätze'), value: platzInfo },
+          ...(v.fields.kosten ? [{ label: tx('Kosten'), value: v.fields.kosten }] : []),
         ],
         icon: <IconCalendarEvent size={20} className="text-primary" />,
       };
@@ -254,8 +254,8 @@ export default function GruppenAnmeldungPage() {
 
   return (
     <IntentWizardShell
-      title="Gruppen-Anmeldung"
-      subtitle="Melde mehrere Personen auf einmal für eine Veranstaltung an."
+      title={tx('Gruppen-Anmeldung')}
+      subtitle={tx('Melde mehrere Personen auf einmal für eine Veranstaltung an.')}
       steps={WIZARD_STEPS}
       currentStep={currentStep}
       onStepChange={setCurrentStep}
@@ -267,18 +267,18 @@ export default function GruppenAnmeldungPage() {
       {currentStep === 1 && (
         <div className="space-y-4">
           <div>
-            <h2 className="text-lg font-semibold">Veranstaltung auswählen</h2>
+            <h2 className="text-lg font-semibold">{tx('Veranstaltung auswählen')}</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Wähle die Veranstaltung aus, für die du Personen anmelden möchtest.
+              {tx('Wähle die Veranstaltung aus, für die du Personen anmelden möchtest.')}
             </p>
           </div>
 
           <EntitySelectStep
             items={eventItems}
             onSelect={handleEventSelect}
-            searchPlaceholder="Veranstaltung suchen..."
+            searchPlaceholder={tx('Veranstaltung suchen...')}
             emptyIcon={<IconCalendarEvent size={40} />}
-            emptyText="Keine Veranstaltungen gefunden."
+            emptyText={tx('Keine Veranstaltungen gefunden.')}
           />
         </div>
       )}
@@ -294,7 +294,7 @@ export default function GruppenAnmeldungPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold truncate">
-                  {selectedEvent.fields.titel ?? 'Veranstaltung'}
+                  {selectedEvent.fields.titel ?? tx('Veranstaltung')}
                 </p>
                 {selectedEvent.fields.beginn && (
                   <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
@@ -318,16 +318,16 @@ export default function GruppenAnmeldungPage() {
               <BudgetTracker
                 budget={maxTeilnehmer}
                 booked={existingBelegung}
-                label="Platzbelegung"
+                label={tx('Platzbelegung')}
                 showRemaining={false}
               />
               <div className="flex items-center justify-between text-sm px-1">
                 <span className="text-muted-foreground">
-                  <span className="font-semibold text-foreground">{existingBelegung}</span> von{' '}
-                  <span className="font-semibold text-foreground">{maxTeilnehmer}</span> Plätzen belegt
+                  <span className="font-semibold text-foreground">{existingBelegung}</span> {tx('von')}{' '}
+                  <span className="font-semibold text-foreground">{maxTeilnehmer}</span> {tx('Plätzen belegt')}
                   {' '}—{' '}
                   <span className={`font-semibold ${freiePlaetze === 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {freiePlaetze} noch frei
+                    {freiePlaetze} {tx('noch frei')}
                   </span>
                 </span>
                 <Badge
@@ -341,7 +341,7 @@ export default function GruppenAnmeldungPage() {
                   }
                 >
                   <IconUsers size={12} className="mr-1" />
-                  Gesamt: {totalNewPersonen} {totalNewPersonen === 1 ? 'Person' : 'Personen'}
+                  {tx('Gesamt:')} {totalNewPersonen} {totalNewPersonen === 1 ? tx('Person') : tx('Personen')}
                 </Badge>
               </div>
             </div>
@@ -352,8 +352,7 @@ export default function GruppenAnmeldungPage() {
             <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               <IconAlertTriangle size={16} className="shrink-0 mt-0.5" stroke={2} />
               <span>
-                Die Gesamtanzahl ({gesamtNachAnmeldung}) übersteigt die maximale Teilnehmerzahl ({maxTeilnehmer}).
-                Bitte reduziere die Anzahl der Personen.
+                {tx('Die Gesamtanzahl (')}{gesamtNachAnmeldung}{tx(') übersteigt die maximale Teilnehmerzahl (')}{maxTeilnehmer}{tx('). Bitte reduziere die Anzahl der Personen.')}
               </span>
             </div>
           )}
@@ -361,7 +360,7 @@ export default function GruppenAnmeldungPage() {
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
               <IconAlertTriangle size={16} className="shrink-0 mt-0.5" stroke={2} />
               <span>
-                Mit dieser Anmeldung werden alle verfügbaren Plätze belegt.
+                {tx('Mit dieser Anmeldung werden alle verfügbaren Plätze belegt.')}
               </span>
             </div>
           )}
@@ -369,7 +368,7 @@ export default function GruppenAnmeldungPage() {
           {/* Teilnehmer-Einträge */}
           <div className="space-y-4">
             <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-              Teilnehmer ({teilnehmerList.length})
+              {tx('Teilnehmer (')}{teilnehmerList.length})
             </h3>
 
             {teilnehmerList.map((t, idx) => (
@@ -379,14 +378,14 @@ export default function GruppenAnmeldungPage() {
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-foreground">
-                    Person {idx + 1}
+                    {tx('Person')} {idx + 1}
                   </span>
                   {teilnehmerList.length > 1 && (
                     <button
                       type="button"
                       onClick={() => handleRemoveTeilnehmer(idx)}
                       className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                      aria-label="Person entfernen"
+                      aria-label={tx('Person entfernen')}
                     >
                       <IconTrash size={16} stroke={2} />
                     </button>
@@ -397,23 +396,23 @@ export default function GruppenAnmeldungPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Vorname <span className="text-red-500">*</span>
+                      {tx('Vorname')} <span className="text-red-500">*</span>
                     </label>
                     <Input
                       value={t.vorname}
                       onChange={e => handleTeilnehmerChange(idx, 'vorname', e.target.value)}
-                      placeholder="Max"
+                      placeholder={tx('Max')}
                       className="w-full"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Nachname <span className="text-red-500">*</span>
+                      {tx('Nachname')} <span className="text-red-500">*</span>
                     </label>
                     <Input
                       value={t.nachname}
                       onChange={e => handleTeilnehmerChange(idx, 'nachname', e.target.value)}
-                      placeholder="Mustermann"
+                      placeholder={tx('Mustermann')}
                       className="w-full"
                     />
                   </div>
@@ -422,17 +421,17 @@ export default function GruppenAnmeldungPage() {
                 {/* Kontakt */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">E-Mail</label>
+                    <label className="text-xs font-medium text-muted-foreground">{tx('E-Mail')}</label>
                     <Input
                       type="email"
                       value={t.email_anmeldung}
                       onChange={e => handleTeilnehmerChange(idx, 'email_anmeldung', e.target.value)}
-                      placeholder="max@beispiel.de"
+                      placeholder={tx('max@beispiel.de')}
                       className="w-full"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Telefon</label>
+                    <label className="text-xs font-medium text-muted-foreground">{tx('Telefon')}</label>
                     <Input
                       type="tel"
                       value={t.telefon_anmeldung}
@@ -447,7 +446,7 @@ export default function GruppenAnmeldungPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Anzahl Personen
+                      {tx('Anzahl Personen')}
                     </label>
                     <Input
                       type="number"
@@ -465,11 +464,11 @@ export default function GruppenAnmeldungPage() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Anmerkungen</label>
+                    <label className="text-xs font-medium text-muted-foreground">{tx('Anmerkungen')}</label>
                     <textarea
                       value={t.anmerkungen}
                       onChange={e => handleTeilnehmerChange(idx, 'anmerkungen', e.target.value)}
-                      placeholder="Besondere Hinweise..."
+                      placeholder={tx('Besondere Hinweise...')}
                       rows={2}
                       className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
                     />
@@ -510,7 +509,7 @@ export default function GruppenAnmeldungPage() {
                     )}
                   </div>
                   <span className="text-sm text-muted-foreground">
-                    E-Mail-Bestätigung erhalten
+                    {tx('E-Mail-Bestätigung erhalten')}
                   </span>
                 </label>
               </div>
@@ -524,7 +523,7 @@ export default function GruppenAnmeldungPage() {
               className="w-full gap-2"
             >
               <IconPlus size={16} stroke={2} />
-              Weitere Person hinzufügen
+              {tx('Weitere Person hinzufügen')}
             </Button>
           </div>
 
@@ -543,7 +542,7 @@ export default function GruppenAnmeldungPage() {
               onClick={() => setCurrentStep(1)}
               className="sm:w-auto w-full"
             >
-              Zurück
+              {tx('Zurück')}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -551,11 +550,11 @@ export default function GruppenAnmeldungPage() {
               className="flex-1 gap-2"
             >
               {submitting ? (
-                <>Wird angemeldet...</>
+                <>{tx('Wird angemeldet...')}</>
               ) : (
                 <>
                   <IconCheck size={16} stroke={2} />
-                  {totalNewPersonen === 1 ? '1 Person anmelden' : `${totalNewPersonen} Personen anmelden`}
+                  {totalNewPersonen === 1 ? tx('1 Person anmelden') : tx`${totalNewPersonen} Personen anmelden`}
                 </>
               )}
             </Button>
@@ -573,11 +572,11 @@ export default function GruppenAnmeldungPage() {
             </div>
             <div>
               <h2 className="text-xl font-bold text-foreground">
-                {registriertPersonen.reduce((sum, p) => sum + p.anzahl_personen, 0)} Personen erfolgreich angemeldet!
+                {registriertPersonen.reduce((sum, p) => sum + p.anzahl_personen, 0)} {tx('Personen erfolgreich angemeldet!')}
               </h2>
               {selectedEvent && (
                 <p className="text-sm text-muted-foreground mt-1">
-                  für{' '}
+                  {tx('für')}{' '}
                   <span className="font-medium text-foreground">
                     {selectedEvent.fields.titel}
                   </span>
@@ -591,7 +590,7 @@ export default function GruppenAnmeldungPage() {
             <div className="rounded-2xl border bg-card overflow-hidden">
               <div className="px-4 py-3 border-b bg-muted/30">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                  Angemeldete Personen
+                  {tx('Angemeldete Personen')}
                 </h3>
               </div>
               <ul className="divide-y">
@@ -607,7 +606,7 @@ export default function GruppenAnmeldungPage() {
                     </div>
                     {p.anzahl_personen > 1 && (
                       <Badge variant="secondary" className="shrink-0 text-xs">
-                        {p.anzahl_personen} Personen
+                        {p.anzahl_personen} {tx('Personen')}
                       </Badge>
                     )}
                   </li>
@@ -644,13 +643,13 @@ export default function GruppenAnmeldungPage() {
           {/* Aktions-Buttons */}
           <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <Button variant="outline" onClick={handleReset} className="flex-1">
-              Weitere Anmeldung
+              {tx('Weitere Anmeldung')}
             </Button>
             <a
               href="#/"
               className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
             >
-              Zurück zum Dashboard
+              {tx('Zurück zum Dashboard')}
             </a>
           </div>
         </div>

@@ -47,6 +47,7 @@ import {
   IconChevronRight,
   IconUsersGroup,
 } from '@tabler/icons-react';
+import { tx } from '@/i18n';
 
 const APPGROUP_ID = '6a315c4f5cde43dedf427cdf';
 const REPAIR_ENDPOINT = '/claude/build/repair';
@@ -201,7 +202,7 @@ export default function DashboardOverview() {
       const key = date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` : 'unbekannt';
       const label = date
         ? date.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })
-        : 'Ohne Datum';
+        : tx('Ohne Datum');
       let group = groups.find(g => g.monthKey === key);
       if (!group) { group = { monthKey: key, label, events: [] }; groups.push(group); }
       group.events.push(v);
@@ -279,8 +280,8 @@ export default function DashboardOverview() {
             <IconUsersGroup size={20} className="text-primary" stroke={1.5} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-foreground truncate">Gruppen-Anmeldung</p>
-            <p className="text-sm text-muted-foreground truncate">Mehrere Personen gleichzeitig für eine Veranstaltung anmelden</p>
+            <p className="font-semibold text-foreground truncate">{tx('Gruppen-Anmeldung')}</p>
+            <p className="text-sm text-muted-foreground truncate">{tx('Mehrere Personen gleichzeitig für eine Veranstaltung anmelden')}</p>
           </div>
           <IconChevronRight size={18} className="text-muted-foreground shrink-0" />
         </a>
@@ -297,7 +298,7 @@ export default function DashboardOverview() {
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}
           >
-            {tab === 'upcoming' ? 'Bevorstehende' : tab === 'all' ? 'Alle' : tab === 'terminplan' ? 'Terminplan' : 'Veranstalter'}
+            {tab === 'upcoming' ? tx('Bevorstehende') : tab === 'all' ? tx('Alle') : tab === 'terminplan' ? tx('Terminplan') : tx('Veranstalter')}
           </button>
         ))}
       </div>
@@ -308,7 +309,7 @@ export default function DashboardOverview() {
           {/* Bundesland-Filter */}
           <div className="flex flex-wrap gap-1.5 items-center">
             <span className="text-xs font-medium text-muted-foreground mr-1 flex items-center gap-1">
-              <IconMapPin size={13} className="shrink-0" />Bundesland:
+              <IconMapPin size={13} className="shrink-0" />{tx('Bundesland:')}
             </span>
             <button
               onClick={() => setSelectedBundesland(null)}
@@ -316,11 +317,11 @@ export default function DashboardOverview() {
                 selectedBundesland === null ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent'
               }`}
             >
-              Alle
+              {tx('Alle')}
             </button>
             {availableBundeslaender.length === 0 ? (
               <span className="text-xs text-muted-foreground italic">
-                (Keine PLZ-Daten vorhanden — bitte PLZ bei Veranstaltungen eintragen)
+                {tx('(Keine PLZ-Daten vorhanden — bitte PLZ bei Veranstaltungen eintragen)')}
               </span>
             ) : (
               availableBundeslaender.map(bl => (
@@ -341,7 +342,7 @@ export default function DashboardOverview() {
           {terminplanByMonth.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
               <IconCalendar size={48} className="text-muted-foreground/40" stroke={1.5} />
-              <p className="text-muted-foreground text-sm">Keine Veranstaltungen gefunden</p>
+              <p className="text-muted-foreground text-sm">{tx('Keine Veranstaltungen gefunden')}</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -353,12 +354,12 @@ export default function DashboardOverview() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-border bg-muted/40">
-                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">Datum</th>
-                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Veranstaltung</th>
-                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">Ort</th>
-                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap hidden md:table-cell">Bundesland</th>
-                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap hidden lg:table-cell">Kategorie</th>
-                            <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">Plätze</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">{tx('Datum')}</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{tx('Veranstaltung')}</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap hidden sm:table-cell">{tx('Ort')}</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap hidden md:table-cell">{tx('Bundesland')}</th>
+                            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap hidden lg:table-cell">{tx('Kategorie')}</th>
+                            <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">{tx('Plätze')}</th>
                             <th className="px-2 py-2.5"></th>
                           </tr>
                         </thead>
@@ -390,7 +391,7 @@ export default function DashboardOverview() {
                                   {timeStr && <span className="block text-xs text-muted-foreground">{timeStr}</span>}
                                 </td>
                                 <td className="px-4 py-3">
-                                  <span className="font-medium text-foreground truncate block max-w-[200px]">{v.fields.titel ?? '(kein Titel)'}</span>
+                                  <span className="font-medium text-foreground truncate block max-w-[200px]">{v.fields.titel ?? tx('(kein Titel)')}</span>
                                   {v.veranstalterName && <span className="text-xs text-muted-foreground truncate block">{v.veranstalterName}</span>}
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap hidden sm:table-cell">
@@ -424,7 +425,7 @@ export default function DashboardOverview() {
                                       </div>
                                     </div>
                                   ) : (
-                                    <span className="text-xs text-muted-foreground">{totalPersonen} Anm.</span>
+                                    <span className="text-xs text-muted-foreground">{totalPersonen} {tx('Anm.')}</span>
                                   )}
                                 </td>
                                 <td className="px-2 py-3">
@@ -455,7 +456,7 @@ export default function DashboardOverview() {
               <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground shrink-0" />
               <input
                 type="text"
-                placeholder="Veranstaltung suchen..."
+                placeholder={tx('Veranstaltung suchen...')}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 text-sm bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-ring"
@@ -473,7 +474,7 @@ export default function DashboardOverview() {
                   selectedKategorien.length === 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent'
                 }`}
               >
-                Alle
+                {tx('Alle')}
               </button>
               {LOOKUP_OPTIONS.veranstaltungen?.kategorie?.map(opt => (
                 <button
@@ -497,7 +498,7 @@ export default function DashboardOverview() {
             </div>
             <Button size="sm" onClick={() => { setEditingVeranstaltung(null); setVeranstaltungDialogOpen(true); }} className="shrink-0">
               <IconPlus size={16} className="shrink-0" />
-              <span className="hidden sm:inline ml-1">Neue Veranstaltung</span>
+              <span className="hidden sm:inline ml-1">{tx('Neue Veranstaltung')}</span>
             </Button>
           </div>
 
@@ -505,9 +506,9 @@ export default function DashboardOverview() {
           {filteredVeranstaltungen.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
               <IconCalendar size={48} className="text-muted-foreground/40" stroke={1.5} />
-              <p className="text-muted-foreground text-sm">Keine Veranstaltungen gefunden</p>
+              <p className="text-muted-foreground text-sm">{tx('Keine Veranstaltungen gefunden')}</p>
               <Button size="sm" variant="outline" onClick={() => { setEditingVeranstaltung(null); setVeranstaltungDialogOpen(true); }}>
-                <IconPlus size={14} className="mr-1" /> Veranstaltung anlegen
+                <IconPlus size={14} className="mr-1" /> {tx('Veranstaltung anlegen')}
               </Button>
             </div>
           ) : (
@@ -549,8 +550,8 @@ export default function DashboardOverview() {
                         <div className="flex-1 min-w-0">
                           <div className="flex flex-wrap gap-2 items-start justify-between">
                             <div className="min-w-0">
-                              <h3 className="font-semibold text-foreground truncate">{v.fields.titel ?? '(kein Titel)'}</h3>
-                              <p className="text-sm text-muted-foreground truncate">{v.veranstalterName || 'Kein Veranstalter'}</p>
+                              <h3 className="font-semibold text-foreground truncate">{v.fields.titel ?? tx('(kein Titel)')}</h3>
+                              <p className="text-sm text-muted-foreground truncate">{v.veranstalterName || tx('Kein Veranstalter')}</p>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
                               <Badge variant="secondary" className={`text-xs ${katColor} border-0`}>
@@ -584,7 +585,7 @@ export default function DashboardOverview() {
                           {auslastung !== null && (
                             <div className="mt-2">
                               <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                                <span>{totalPersonen} / {v.fields.max_teilnehmer} Plätze</span>
+                                <span>{totalPersonen} / {v.fields.max_teilnehmer} {tx('Plätze')}</span>
                                 <span>{auslastung}%</span>
                               </div>
                               <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -616,7 +617,7 @@ export default function DashboardOverview() {
                           className="text-xs h-7 px-2"
                         >
                           <IconUserPlus size={13} className="shrink-0 mr-1" />
-                          Anmeldung
+                          {tx('Anmeldung')}
                           {veranstAnmeldungen.length > 0 && (
                             <span className="ml-1 bg-primary/10 text-primary rounded-full px-1.5 py-0 text-[10px] font-medium">
                               {veranstAnmeldungen.length}
@@ -631,7 +632,7 @@ export default function DashboardOverview() {
                           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                         >
                           {isExpanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
-                          <span>{veranstAnmeldungen.length} Anmeldung{veranstAnmeldungen.length !== 1 ? 'en' : ''}</span>
+                          <span>{veranstAnmeldungen.length} {tx('Anmeldung')}{veranstAnmeldungen.length !== 1 ? 'en' : ''}</span>
                         </button>
                       </div>
                       <div className="flex gap-1">
@@ -642,7 +643,7 @@ export default function DashboardOverview() {
                             setVeranstaltungDialogOpen(true);
                           }}
                           className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                          title="Bearbeiten"
+                          title={tx('Bearbeiten')}
                         >
                           <IconPencil size={14} />
                         </button>
@@ -652,7 +653,7 @@ export default function DashboardOverview() {
                             setDeleteVeranstaltung(v);
                           }}
                           className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          title="Löschen"
+                          title={tx('Löschen')}
                         >
                           <IconTrash size={14} />
                         </button>
@@ -663,7 +664,7 @@ export default function DashboardOverview() {
                     {isExpanded && (
                       <div className="border-t border-border bg-muted/30 px-4 py-3">
                         {veranstAnmeldungen.length === 0 ? (
-                          <p className="text-xs text-muted-foreground py-2">Noch keine Anmeldungen</p>
+                          <p className="text-xs text-muted-foreground py-2">{tx('Noch keine Anmeldungen')}</p>
                         ) : (
                           <div className="space-y-2">
                             {veranstAnmeldungen.map(a => (
@@ -674,12 +675,12 @@ export default function DashboardOverview() {
                               >
                                 <div className="min-w-0">
                                   <span className="text-sm font-medium truncate block">
-                                    {[a.fields.vorname, a.fields.nachname].filter(Boolean).join(' ') || '(kein Name)'}
+                                    {[a.fields.vorname, a.fields.nachname].filter(Boolean).join(' ') || tx('(kein Name)')}
                                   </span>
                                   <span className="text-xs text-muted-foreground truncate block">
                                     {a.fields.email_anmeldung ?? ''}
                                     {a.fields.anzahl_personen && a.fields.anzahl_personen > 1
-                                      ? ` · ${a.fields.anzahl_personen} Personen`
+                                      ? tx` · ${a.fields.anzahl_personen} Personen`
                                       : ''}
                                   </span>
                                 </div>
@@ -721,16 +722,16 @@ export default function DashboardOverview() {
         /* Veranstalter-Tab */
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-base font-semibold text-foreground">Veranstalter ({veranstalter.length})</h2>
+            <h2 className="text-base font-semibold text-foreground">{tx('Veranstalter (')}{veranstalter.length})</h2>
             <Button size="sm" onClick={() => { setEditingVeranstalter(null); setVeranstalterDialogOpen(true); }}>
               <IconPlus size={16} className="shrink-0" />
-              <span className="hidden sm:inline ml-1">Neuer Veranstalter</span>
+              <span className="hidden sm:inline ml-1">{tx('Neuer Veranstalter')}</span>
             </Button>
           </div>
           {veranstalter.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <IconBuildingStore size={48} className="text-muted-foreground/40" stroke={1.5} />
-              <p className="text-muted-foreground text-sm">Noch keine Veranstalter</p>
+              <p className="text-muted-foreground text-sm">{tx('Noch keine Veranstalter')}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -747,7 +748,7 @@ export default function DashboardOverview() {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-foreground truncate">{vs.fields.organisation_name ?? '(kein Name)'}</h3>
+                        <h3 className="font-semibold text-foreground truncate">{vs.fields.organisation_name ?? tx('(kein Name)')}</h3>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {vs.fields.organisation_typ?.label ?? '—'}
                         </p>
@@ -765,7 +766,7 @@ export default function DashboardOverview() {
                       </div>
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         <span className="text-xs bg-primary/10 text-primary rounded-full px-2 py-0.5 font-medium">
-                          {vsVeranstaltungen.length} Veranst.
+                          {vsVeranstaltungen.length} {tx('Veranst.')}
                         </span>
                         <div className="flex gap-1">
                           <button
@@ -838,24 +839,24 @@ export default function DashboardOverview() {
 
       <ConfirmDialog
         open={!!deleteVeranstaltung}
-        title="Veranstaltung löschen"
-        description={`„${deleteVeranstaltung?.fields.titel ?? ''}" wirklich löschen? Alle zugehörigen Anmeldungen bleiben erhalten.`}
+        title={tx('Veranstaltung löschen')}
+        description={tx`„${deleteVeranstaltung?.fields.titel ?? ''}" wirklich löschen? Alle zugehörigen Anmeldungen bleiben erhalten.`}
         onConfirm={handleDeleteVeranstaltung}
         onClose={() => setDeleteVeranstaltung(null)}
       />
 
       <ConfirmDialog
         open={!!deleteAnmeldung}
-        title="Anmeldung löschen"
-        description={`Anmeldung von ${[deleteAnmeldung?.fields.vorname, deleteAnmeldung?.fields.nachname].filter(Boolean).join(' ')} wirklich löschen?`}
+        title={tx('Anmeldung löschen')}
+        description={tx`Anmeldung von ${[deleteAnmeldung?.fields.vorname, deleteAnmeldung?.fields.nachname].filter(Boolean).join(' ')} wirklich löschen?`}
         onConfirm={handleDeleteAnmeldung}
         onClose={() => setDeleteAnmeldung(null)}
       />
 
       <ConfirmDialog
         open={!!deleteVeranstalter}
-        title="Veranstalter löschen"
-        description={`„${deleteVeranstalter?.fields.organisation_name ?? ''}" wirklich löschen?`}
+        title={tx('Veranstalter löschen')}
+        description={tx`„${deleteVeranstalter?.fields.organisation_name ?? ''}" wirklich löschen?`}
         onConfirm={handleDeleteVeranstalter}
         onClose={() => setDeleteVeranstalter(null)}
       />
@@ -885,7 +886,7 @@ export default function DashboardOverview() {
           return (
             <>
               <RecordHeader
-                title={v.fields.titel ?? '(kein Titel)'}
+                title={v.fields.titel ?? tx('(kein Titel)')}
                 subtitle={v.veranstalterName || undefined}
                 badges={v.fields.kategorie ? [
                   <span key="kat" className={`text-xs px-2 py-0.5 rounded-full font-medium ${katColor}`}>
@@ -894,18 +895,18 @@ export default function DashboardOverview() {
                 ] : undefined}
               />
               <RecordKeyFacts items={[
-                { label: 'Beginn', value: formatDateTime(v.fields.beginn) },
-                { label: 'Anmeldungen', value: `${veranstAnmeldungen.length} (${totalPersonen} Personen)` },
-                ...(v.fields.max_teilnehmer ? [{ label: 'Max. Plätze', value: String(v.fields.max_teilnehmer) }] : []),
-                ...(v.fields.kosten ? [{ label: 'Kosten', value: v.fields.kosten }] : []),
+                { label: tx('Beginn'), value: formatDateTime(v.fields.beginn) },
+                { label: tx('Anmeldungen'), value: tx`${veranstAnmeldungen.length} (${totalPersonen} Personen)` },
+                ...(v.fields.max_teilnehmer ? [{ label: tx('Max. Plätze'), value: String(v.fields.max_teilnehmer) }] : []),
+                ...(v.fields.kosten ? [{ label: tx('Kosten'), value: v.fields.kosten }] : []),
               ]} />
-              <RecordSection title="Zeitraum & Ort" cols={2}>
-                <RecordField label="Beginn" value={v.fields.beginn} format="datetime" />
-                <RecordField label="Ende" value={v.fields.ende} format="datetime" hideEmpty />
-                <RecordField label="Anmeldefrist" value={v.fields.anmeldefrist} format="date" hideEmpty />
-                <RecordField label="Veranstaltungsort" value={v.fields.veranstaltungsort_name} hideEmpty />
+              <RecordSection title={tx('Zeitraum & Ort')} cols={2}>
+                <RecordField label={tx('Beginn')} value={v.fields.beginn} format="datetime" />
+                <RecordField label={tx('Ende')} value={v.fields.ende} format="datetime" hideEmpty />
+                <RecordField label={tx('Anmeldefrist')} value={v.fields.anmeldefrist} format="date" hideEmpty />
+                <RecordField label={tx('Veranstaltungsort')} value={v.fields.veranstaltungsort_name} hideEmpty />
                 <RecordField
-                  label="Adresse"
+                  label={tx('Adresse')}
                   value={[
                     v.fields.veranstaltungsort_strasse,
                     v.fields.veranstaltungsort_hausnummer,
@@ -916,17 +917,17 @@ export default function DashboardOverview() {
                 />
               </RecordSection>
               {v.fields.beschreibung_veranstaltung && (
-                <RecordSection title="Beschreibung">
-                  <RecordField label="Beschreibung" value={v.fields.beschreibung_veranstaltung} format="longtext" className="md:col-span-2" />
+                <RecordSection title={tx('Beschreibung')}>
+                  <RecordField label={tx('Beschreibung')} value={v.fields.beschreibung_veranstaltung} format="longtext" className="md:col-span-2" />
                 </RecordSection>
               )}
               {veranstAnmeldungen.length > 0 && (
-                <RecordSection title={`Anmeldungen (${veranstAnmeldungen.length})`} icon={IconUsers}>
+                <RecordSection title={tx`Anmeldungen (${veranstAnmeldungen.length})`} icon={IconUsers}>
                   {veranstAnmeldungen.map(a => (
                     <RecordRelation
                       key={a.record_id}
-                      name={[a.fields.vorname, a.fields.nachname].filter(Boolean).join(' ') || '(kein Name)'}
-                      meta={[a.fields.email_anmeldung, a.fields.anzahl_personen ? `${a.fields.anzahl_personen} Pers.` : ''].filter(Boolean).join(' · ')}
+                      name={[a.fields.vorname, a.fields.nachname].filter(Boolean).join(' ') || tx('(kein Name)')}
+                      meta={[a.fields.email_anmeldung, a.fields.anzahl_personen ? tx`${a.fields.anzahl_personen} Pers.` : ''].filter(Boolean).join(' · ')}
                       icon={IconUsers}
                       onClick={() => anmeldungOverlay.replace(a)}
                     />
@@ -957,24 +958,24 @@ export default function DashboardOverview() {
           return (
             <>
               <RecordHeader
-                title={[a.fields.vorname, a.fields.nachname].filter(Boolean).join(' ') || '(kein Name)'}
+                title={[a.fields.vorname, a.fields.nachname].filter(Boolean).join(' ') || tx('(kein Name)')}
                 subtitle={a.veranstaltungName || undefined}
               />
               <RecordKeyFacts items={[
-                { label: 'Veranstaltung', value: a.veranstaltungName || '—' },
-                { label: 'Personen', value: String(a.fields.anzahl_personen ?? 1) },
+                { label: tx('Veranstaltung'), value: a.veranstaltungName || '—' },
+                { label: tx('Personen'), value: String(a.fields.anzahl_personen ?? 1) },
               ]} />
-              <RecordSection title="Kontakt" cols={2}>
-                <RecordField label="Vorname" value={a.fields.vorname} hideEmpty />
-                <RecordField label="Nachname" value={a.fields.nachname} hideEmpty />
-                <RecordField label="E-Mail" value={a.fields.email_anmeldung} format="email" hideEmpty />
-                <RecordField label="Telefon" value={a.fields.telefon_anmeldung} hideEmpty />
-                <RecordField label="Anzahl Personen" value={a.fields.anzahl_personen != null ? String(a.fields.anzahl_personen) : undefined} hideEmpty />
-                <RecordField label="E-Mail-Benachrichtigung" value={a.fields.email_benachrichtigung} format="bool" hideEmpty />
+              <RecordSection title={tx('Kontakt')} cols={2}>
+                <RecordField label={tx('Vorname')} value={a.fields.vorname} hideEmpty />
+                <RecordField label={tx('Nachname')} value={a.fields.nachname} hideEmpty />
+                <RecordField label={tx('E-Mail')} value={a.fields.email_anmeldung} format="email" hideEmpty />
+                <RecordField label={tx('Telefon')} value={a.fields.telefon_anmeldung} hideEmpty />
+                <RecordField label={tx('Anzahl Personen')} value={a.fields.anzahl_personen != null ? String(a.fields.anzahl_personen) : undefined} hideEmpty />
+                <RecordField label={tx('E-Mail-Benachrichtigung')} value={a.fields.email_benachrichtigung} format="bool" hideEmpty />
               </RecordSection>
               {a.fields.anmerkungen && (
-                <RecordSection title="Anmerkungen">
-                  <RecordField label="Anmerkungen" value={a.fields.anmerkungen} format="longtext" className="md:col-span-2" />
+                <RecordSection title={tx('Anmerkungen')}>
+                  <RecordField label={tx('Anmerkungen')} value={a.fields.anmerkungen} format="longtext" className="md:col-span-2" />
                 </RecordSection>
               )}
               <RecordAttachments appId={APP_IDS.ANMELDUNGEN} recordId={a.record_id} />
@@ -1004,34 +1005,34 @@ export default function DashboardOverview() {
           return (
             <>
               <RecordHeader
-                title={vs.fields.organisation_name ?? '(kein Name)'}
+                title={vs.fields.organisation_name ?? tx('(kein Name)')}
                 subtitle={vs.fields.organisation_typ?.label}
               />
               <RecordKeyFacts items={[
-                { label: 'Veranstaltungen', value: String(vsVeranstaltungen.length) },
-                ...(vs.fields.ort ? [{ label: 'Ort', value: vs.fields.ort }] : []),
+                { label: tx('Veranstaltungen'), value: String(vsVeranstaltungen.length) },
+                ...(vs.fields.ort ? [{ label: tx('Ort'), value: vs.fields.ort }] : []),
               ]} />
-              <RecordSection title="Kontakt" cols={2}>
-                <RecordField label="Ansprechpartner" value={[vs.fields.ansprechpartner_vorname, vs.fields.ansprechpartner_nachname].filter(Boolean).join(' ') || undefined} hideEmpty />
-                <RecordField label="E-Mail" value={vs.fields.email} format="email" hideEmpty />
-                <RecordField label="Telefon" value={vs.fields.telefon} hideEmpty />
-                <RecordField label="Website" value={vs.fields.website} format="url" hideEmpty />
+              <RecordSection title={tx('Kontakt')} cols={2}>
+                <RecordField label={tx('Ansprechpartner')} value={[vs.fields.ansprechpartner_vorname, vs.fields.ansprechpartner_nachname].filter(Boolean).join(' ') || undefined} hideEmpty />
+                <RecordField label={tx('E-Mail')} value={vs.fields.email} format="email" hideEmpty />
+                <RecordField label={tx('Telefon')} value={vs.fields.telefon} hideEmpty />
+                <RecordField label={tx('Website')} value={vs.fields.website} format="url" hideEmpty />
               </RecordSection>
-              <RecordSection title="Adresse" cols={2}>
-                <RecordField label="Straße" value={[vs.fields.strasse, vs.fields.hausnummer].filter(Boolean).join(' ') || undefined} hideEmpty />
-                <RecordField label="Ort" value={[vs.fields.plz, vs.fields.ort].filter(Boolean).join(' ') || undefined} hideEmpty />
+              <RecordSection title={tx('Adresse')} cols={2}>
+                <RecordField label={tx('Straße')} value={[vs.fields.strasse, vs.fields.hausnummer].filter(Boolean).join(' ') || undefined} hideEmpty />
+                <RecordField label={tx('Ort')} value={[vs.fields.plz, vs.fields.ort].filter(Boolean).join(' ') || undefined} hideEmpty />
               </RecordSection>
               {vs.fields.beschreibung && (
-                <RecordSection title="Beschreibung">
-                  <RecordField label="Beschreibung" value={vs.fields.beschreibung} format="longtext" className="md:col-span-2" />
+                <RecordSection title={tx('Beschreibung')}>
+                  <RecordField label={tx('Beschreibung')} value={vs.fields.beschreibung} format="longtext" className="md:col-span-2" />
                 </RecordSection>
               )}
               {vsVeranstaltungen.length > 0 && (
-                <RecordSection title="Veranstaltungen" icon={IconCalendar}>
+                <RecordSection title={tx('Veranstaltungen')} icon={IconCalendar}>
                   {vsVeranstaltungen.map(v => (
                     <RecordRelation
                       key={v.record_id}
-                      name={v.fields.titel ?? '(kein Titel)'}
+                      name={v.fields.titel ?? tx('(kein Titel)')}
                       meta={formatDateTime(v.fields.beginn)}
                       icon={IconCalendar}
                       onClick={() => veranstaltungOverlay.replace(v)}
@@ -1073,7 +1074,7 @@ function DashboardError({ error, onRetry }: { error: Error; onRetry: () => void 
 
   const handleRepair = async () => {
     setRepairing(true);
-    setRepairStatus('Reparatur wird gestartet...');
+    setRepairStatus(tx('Reparatur wird gestartet...'));
     setRepairFailed(false);
 
     const errorContext = JSON.stringify({
@@ -1118,7 +1119,7 @@ function DashboardError({ error, onRetry }: { error: Error; onRetry: () => void 
             setRepairDone(true);
             setRepairing(false);
           }
-          if (content.startsWith('[ERROR]') && !content.includes('Dashboard-Links')) {
+          if (content.startsWith('[ERROR]') && !content.includes('Dashboard-Links')) { /* i18n-exempt */
             setRepairFailed(true);
           }
         }
@@ -1136,11 +1137,11 @@ function DashboardError({ error, onRetry }: { error: Error; onRetry: () => void 
           <IconCheck size={22} className="text-green-500" />
         </div>
         <div className="text-center">
-          <h3 className="font-semibold text-foreground mb-1">Dashboard repariert</h3>
-          <p className="text-sm text-muted-foreground max-w-xs">Das Problem wurde behoben. Bitte laden Sie die Seite neu.</p>
+          <h3 className="font-semibold text-foreground mb-1">{tx('Dashboard repariert')}</h3>
+          <p className="text-sm text-muted-foreground max-w-xs">{tx('Das Problem wurde behoben. Bitte laden Sie die Seite neu.')}</p>
         </div>
         <Button size="sm" onClick={() => window.location.reload()}>
-          <IconRefresh size={14} className="mr-1" />Neu laden
+          <IconRefresh size={14} className="mr-1" />{tx('Neu laden')}
         </Button>
       </div>
     );
@@ -1152,21 +1153,21 @@ function DashboardError({ error, onRetry }: { error: Error; onRetry: () => void 
         <IconAlertCircle size={22} className="text-destructive" />
       </div>
       <div className="text-center">
-        <h3 className="font-semibold text-foreground mb-1">Fehler beim Laden</h3>
+        <h3 className="font-semibold text-foreground mb-1">{tx('Fehler beim Laden')}</h3>
         <p className="text-sm text-muted-foreground max-w-xs">
           {repairing ? repairStatus : error.message}
         </p>
       </div>
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={onRetry} disabled={repairing}>Erneut versuchen</Button>
+        <Button variant="outline" size="sm" onClick={onRetry} disabled={repairing}>{tx('Erneut versuchen')}</Button>
         <Button size="sm" onClick={handleRepair} disabled={repairing}>
           {repairing
             ? <span className="inline-block w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-1" />
             : <IconTool size={14} className="mr-1" />}
-          {repairing ? 'Reparatur läuft...' : 'Dashboard reparieren'}
+          {repairing ? tx('Reparatur läuft...') : tx('Dashboard reparieren')}
         </Button>
       </div>
-      {repairFailed && <p className="text-sm text-destructive">Automatische Reparatur fehlgeschlagen. Bitte kontaktieren Sie den Support.</p>}
+      {repairFailed && <p className="text-sm text-destructive">{tx('Automatische Reparatur fehlgeschlagen. Bitte kontaktieren Sie den Support.')}</p>}
     </div>
   );
 }

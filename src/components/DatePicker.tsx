@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { de } from 'date-fns/locale';
 import { format, isValid, parse } from 'date-fns';
 import { IconCalendar, IconClock, IconX } from '@tabler/icons-react';
+import { dateFnsLocale, t } from '@/i18n';
 
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -43,7 +43,7 @@ function formatLabel(date: Date, mode: Mode): string {
   const showYear = date.getFullYear() !== new Date().getFullYear();
   const hasTime = mode === 'datetime' && (date.getHours() !== 0 || date.getMinutes() !== 0);
   const dateFmt = showYear ? "EEE, d. MMM yyyy" : "EEE, d. MMM";
-  const datePart = format(date, dateFmt, { locale: de });
+  const datePart = format(date, dateFmt, { locale: dateFnsLocale() });
   return hasTime ? `${datePart} · ${format(date, "HH:mm")}` : datePart;
 }
 
@@ -80,28 +80,37 @@ export function DatePicker({
   if (isTouchDevice) {
     // Empty string falls back to the format hint so the input never looks
     // blank before the AI sub-agent has filled the placeholder marker.
-    const ph = placeholder || (mode === 'datetime' ? 'tt.mm.jjjj, hh:mm' : 'tt.mm.jjjj');
+    const ph = placeholder || (mode === 'datetime' ? t('date_hint_datetime') : t('date_hint_date'));
+    // iOS Safari sizes a native <input type=date> to the intrinsic width of its
+    // ::-webkit-datetime-edit (~150px) and ignores width / max-width / min-width
+    // entirely — the BOX itself grows, so in a narrow grid column the field
+    // spills past the dialog (confirmed on a real device; `block` alone only
+    // fixes Chrome). Fix is structural: a plain <div> wrapper (divs DO honour
+    // width) owns the visible box (border, fill, height, rounded) AND clips with
+    // overflow-hidden, so however wide iOS makes the input, it can never exceed
+    // the column. The bare borderless input fills the wrapper. We also hide the
+    // browser's native date indicator/spin chrome and give NO icon of our own:
+    // at this column width (~130px) the value "15.06.2026" only fits at 16px if
+    // it owns the full field — any trailing icon would clip the last digits.
+    // Result: the date field reads as a plain value box, identical to the text
+    // inputs around it. Tapping still opens the native picker on touch devices.
     return (
-      <input
-        id={id}
-        type={mode === 'datetime' ? 'datetime-local' : 'date'}
-        step={mode === 'datetime' ? 60 : undefined}
-        value={value ?? ''}
-        min={min}
-        max={max}
-        required={required}
-        placeholder={ph}
-        onChange={e => onChange(e.target.value || null)}
-        // min-w-0 is critical: webkit reserves intrinsic width for date/time
-        // pseudo-elements (::-webkit-datetime-edit-*) that w-full alone cannot
-        // override. Without it the input pushes its container wider than the
-        // dialog and triggers horizontal scroll on mobile.
-        style={{ minWidth: 0 }}
-        className={`flex h-10 w-full min-w-0 max-w-full rounded-md border bg-background px-3 py-2 text-sm
-          ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2
-          ${invalid ? 'border-destructive' : 'border-input'}`}
-        aria-invalid={invalid || undefined}
-      />
+      <div className={`relative flex h-9 max-sm:h-11 w-full min-w-0 max-w-full items-center overflow-hidden rounded-md border bg-transparent dark:bg-input/30 shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px] ${invalid ? 'border-destructive' : 'border-input'}`}>
+        <input
+          id={id}
+          type={mode === 'datetime' ? 'datetime-local' : 'date'}
+          step={mode === 'datetime' ? 60 : undefined}
+          value={value ?? ''}
+          min={min}
+          max={max}
+          required={required}
+          placeholder={ph}
+          onChange={e => onChange(e.target.value || null)}
+          style={{ minWidth: 0 }}
+          className="flex h-full w-full min-w-0 items-center border-0 bg-transparent px-3 py-1 text-base md:text-sm outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-date-and-time-value]:text-left"
+          aria-invalid={invalid || undefined}
+        />
+      </div>
     );
   }
 
@@ -152,15 +161,14 @@ export function DatePicker({
           type="button"
           aria-invalid={invalid || undefined}
           style={{ minWidth: 0 }}
-          className={`flex h-10 w-full min-w-0 max-w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm
-            ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2
+          className={`flex h-9 max-sm:h-11 w-full min-w-0 max-w-full items-center gap-2 rounded-md border bg-transparent dark:bg-input/30 px-3 py-1 text-base md:text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]
             ${invalid ? 'border-destructive' : 'border-input'}`}
         >
           {mode === 'datetime'
             ? <IconClock size={14} className="shrink-0 text-muted-foreground" />
             : <IconCalendar size={14} className="shrink-0 text-muted-foreground" />}
           <span className={`flex-1 text-left ${date ? '' : 'text-muted-foreground'}`}>
-            {date ? formatLabel(date, mode) : (placeholder || (mode === 'datetime' ? 'Datum & Uhrzeit wählen' : 'Datum wählen'))}
+            {date ? formatLabel(date, mode) : (placeholder || (mode === 'datetime' ? t('date_pick_datetime') : t('date_pick_date')))}
           </span>
           {date && (
             <span
@@ -169,7 +177,7 @@ export function DatePicker({
               onClick={clear}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(null); } }}
               className="shrink-0 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Datum zurücksetzen"
+              aria-label={t('date_clear')}
             >
               <IconX size={14} />
             </span>
@@ -179,7 +187,7 @@ export function DatePicker({
       <PopoverContent align="start" className="w-auto p-0">
         <Calendar
           mode="single"
-          locale={de}
+          locale={dateFnsLocale()}
           selected={date ?? undefined}
           onSelect={commitDate}
           disabled={
@@ -204,7 +212,7 @@ export function DatePicker({
                 commitTime(v, minutes);
               }}
               className="h-8 w-14 rounded-md border border-input bg-background px-2 text-center text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              aria-label="Stunden"
+              aria-label={t('date_hours')}
             />
             <span className="text-muted-foreground">:</span>
             <input
@@ -218,18 +226,18 @@ export function DatePicker({
                 commitTime(hours, v);
               }}
               className="h-8 w-14 rounded-md border border-input bg-background px-2 text-center text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              aria-label="Minuten"
+              aria-label={t('date_minutes')}
             />
             <div className="ml-auto flex gap-1">
-              <Button type="button" variant="ghost" size="sm" onClick={pickToday}>Jetzt</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={pickToday}>{t('date_now')}</Button>
               <Button type="button" variant="default" size="sm" onClick={() => setOpen(false)}>OK</Button>
             </div>
           </div>
         )}
         {mode === 'date' && (
           <div className="flex items-center justify-between border-t px-3 py-2">
-            <Button type="button" variant="ghost" size="sm" onClick={pickToday}>Heute</Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => { onChange(null); setOpen(false); }}>Zurücksetzen</Button>
+            <Button type="button" variant="ghost" size="sm" onClick={pickToday}>{t('date_today')}</Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => { onChange(null); setOpen(false); }}>{t('date_reset')}</Button>
           </div>
         )}
       </PopoverContent>

@@ -7,6 +7,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { t } from '@/i18n';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -25,8 +26,8 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, description }: 
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Abbrechen</Button>
-          <Button variant="destructive" onClick={onConfirm}>Löschen</Button>
+          <Button variant="outline" onClick={onClose}>{t('cancel')}</Button>
+          <Button variant="destructive" onClick={onConfirm}>{t('delete')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

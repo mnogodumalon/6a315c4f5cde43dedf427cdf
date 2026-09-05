@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
 import { formEnhancements } from '@/config/form-enhancements/Veranstaltungen';
 import { evalComputed } from '@/config/form-enhancements/types';
+import { t, appLabel, fieldLabel, localeTag, CURRENCY } from '@/i18n';
 
 export default function VeranstaltungenDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,11 +68,11 @@ export default function VeranstaltungenDetailPage() {
   if (!record) {
     return (
       <RecordViewEmpty
-        title="Eintrag nicht gefunden"
+        title={t('not_found')}
         action={
           <Button variant="ghost" onClick={() => navigate('/veranstaltungen')}>
             <IconArrowLeft className="h-4 w-4 mr-1.5" />
-            Zurück
+            {t('back')}
           </Button>
         }
       />
@@ -82,10 +83,10 @@ export default function VeranstaltungenDetailPage() {
     <RecordView
       onBack={() => navigate('/veranstaltungen')}
       onEdit={() => setEditing(true)}
-      backLabel="Zurück"
-      editLabel="Bearbeiten"
+      backLabel={t('back')}
+      editLabel={t('edit_button')}
     >
-      <RecordHeader title={record.fields.titel ?? 'Veranstaltungen'} />
+      <RecordHeader title={record.fields.titel ?? appLabel('veranstaltungen')} />
 
       {(() => {
         const lookupLists: Record<string, unknown> = {
@@ -93,8 +94,8 @@ export default function VeranstaltungenDetailPage() {
         };
         const fmtComputed = (k: string, n: number) =>
           /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k)
-            ? n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-            : n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+            ? n.toLocaleString(localeTag(), { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : n.toLocaleString(localeTag(), { maximumFractionDigits: 2 });
         const computedFacts = Object.entries(formEnhancements.computed)
           .map(([key, formula]) => {
             const v = evalComputed(formula, record!.fields as Record<string, unknown>, { lookupLists });
@@ -106,21 +107,21 @@ export default function VeranstaltungenDetailPage() {
         return computedFacts.length > 0 ? <RecordKeyFacts items={computedFacts} /> : null;
       })()}
 
-      <RecordSection title="Details" cols={2}>
-        <RecordField label="Veranstalter (E-Mail-Adresse)" value={getVeranstalterDisplayName(record.fields.veranstalter)} format="text" />
-        <RecordField label="Titel der Veranstaltung" value={record.fields.titel} format="text" />
-        <RecordField label="Beschreibung" value={record.fields.beschreibung_veranstaltung} format="longtext" className="md:col-span-2" />
-        <RecordField label="Kategorie" value={record.fields.kategorie} format="pill" />
-        <RecordField label="Beginn (Datum & Uhrzeit)" value={record.fields.beginn} format="datetime" />
-        <RecordField label="Ende (Datum & Uhrzeit)" value={record.fields.ende} format="datetime" />
-        <RecordField label="Anmeldefrist" value={record.fields.anmeldefrist} format="date" />
-        <RecordField label="Name des Veranstaltungsorts" value={record.fields.veranstaltungsort_name} format="text" />
-        <RecordField label="Straße" value={record.fields.veranstaltungsort_strasse} format="text" />
-        <RecordField label="Hausnummer" value={record.fields.veranstaltungsort_hausnummer} format="text" />
-        <RecordField label="Postleitzahl" value={record.fields.veranstaltungsort_plz} format="text" />
-        <RecordField label="Ort" value={record.fields.veranstaltungsort_ort} format="text" />
-        <RecordField label="Maximale Teilnehmerzahl" value={record.fields.max_teilnehmer} format="text" />
-        <RecordField label="Kosten / Eintritt" value={record.fields.kosten} format="text" />
+      <RecordSection title={t('details')} cols={2}>
+        <RecordField label={fieldLabel('veranstaltungen', 'veranstalter')} value={getVeranstalterDisplayName(record.fields.veranstalter)} format="text" />
+        <RecordField label={fieldLabel('veranstaltungen', 'titel')} value={record.fields.titel} format="text" />
+        <RecordField label={fieldLabel('veranstaltungen', 'beschreibung_veranstaltung')} value={record.fields.beschreibung_veranstaltung} format="longtext" className="md:col-span-2" />
+        <RecordField label={fieldLabel('veranstaltungen', 'kategorie')} value={record.fields.kategorie} format="pill" />
+        <RecordField label={fieldLabel('veranstaltungen', 'beginn')} value={record.fields.beginn} format="datetime" />
+        <RecordField label={fieldLabel('veranstaltungen', 'ende')} value={record.fields.ende} format="datetime" />
+        <RecordField label={fieldLabel('veranstaltungen', 'anmeldefrist')} value={record.fields.anmeldefrist} format="date" />
+        <RecordField label={fieldLabel('veranstaltungen', 'veranstaltungsort_name')} value={record.fields.veranstaltungsort_name} format="text" />
+        <RecordField label={fieldLabel('veranstaltungen', 'veranstaltungsort_strasse')} value={record.fields.veranstaltungsort_strasse} format="text" />
+        <RecordField label={fieldLabel('veranstaltungen', 'veranstaltungsort_hausnummer')} value={record.fields.veranstaltungsort_hausnummer} format="text" />
+        <RecordField label={fieldLabel('veranstaltungen', 'veranstaltungsort_plz')} value={record.fields.veranstaltungsort_plz} format="text" />
+        <RecordField label={fieldLabel('veranstaltungen', 'veranstaltungsort_ort')} value={record.fields.veranstaltungsort_ort} format="text" />
+        <RecordField label={fieldLabel('veranstaltungen', 'max_teilnehmer')} value={record.fields.max_teilnehmer} format="text" />
+        <RecordField label={fieldLabel('veranstaltungen', 'kosten')} value={record.fields.kosten} format="text" />
       </RecordSection>
 
       <RecordAttachments appId={APP_IDS.VERANSTALTUNGEN} recordId={record.record_id} />
@@ -128,7 +129,7 @@ export default function VeranstaltungenDetailPage() {
       <div className="flex justify-end pt-2">
         <Button variant="ghost" onClick={() => setDeleteOpen(true)} className="text-destructive hover:text-destructive">
           <IconTrash className="h-4 w-4 mr-1.5" />
-          Löschen
+          {t('delete')}
         </Button>
       </div>
 
@@ -147,8 +148,8 @@ export default function VeranstaltungenDetailPage() {
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onConfirm={handleDelete}
-        title="Veranstaltungen löschen"
-        description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
+        title={t('delete_entity', { entity: appLabel('veranstaltungen') })}
+        description={t('confirm_delete_desc')}
       />
     </RecordView>
   );

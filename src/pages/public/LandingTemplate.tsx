@@ -23,6 +23,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { tx } from '@/i18n';
 
 // ─── WIRING — agent must keep these three constants in sync with the target form-config ───
 // Matches settings.PROXY_BASE_URL; empty string → relative URL against the deploy host.
@@ -44,7 +45,7 @@ async function submit(fields: Record<string, unknown>, captchaToken: string) {
   });
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || 'Submission failed');
+    throw new Error(err || tx('Submission failed'));
   }
   return res.json();
 }
@@ -74,7 +75,7 @@ export default function LandingTemplate() {
     e.preventDefault();
     const token = readCaptchaToken();
     if (!token) {
-      setError('Bitte warte auf die Spam-Prüfung und versuche es erneut.');
+      setError(tx('Bitte warte auf die Spam-Prüfung und versuche es erneut.'));
       return;
     }
     setSubmitting(true);
@@ -83,7 +84,7 @@ export default function LandingTemplate() {
       await submit(fields, token);
       setSubmitted(true);
     } catch (err: any) {
-      setError(err.message || 'Etwas ist schiefgelaufen. Bitte versuche es erneut.');
+      setError(err.message || tx('Etwas ist schiefgelaufen. Bitte versuche es erneut.'));
     } finally {
       setSubmitting(false);
     }
@@ -93,8 +94,8 @@ export default function LandingTemplate() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="text-center space-y-3 max-w-md">
-          <h2 className="text-2xl font-bold">Vielen Dank!</h2>
-          <p className="text-muted-foreground">Wir haben deine Eingabe erhalten.</p>
+          <h2 className="text-2xl font-bold">{tx('Vielen Dank!')}</h2>
+          <p className="text-muted-foreground">{tx('Wir haben deine Eingabe erhalten.')}</p>
         </div>
       </div>
     );
@@ -105,10 +106,10 @@ export default function LandingTemplate() {
       {/* ─── HERO — agent rewrites headline, subtitle, colors, optional image ─── */}
       <section className="px-6 py-20 md:py-32 text-center max-w-3xl mx-auto">
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
-          Dein Landing-Page-Titel
+          {tx('Dein Landing-Page-Titel')}
         </h1>
         <p className="mt-4 text-lg md:text-xl text-muted-foreground">
-          Untertitel oder Einleitung, die den Besucher abholt.
+          {tx('Untertitel oder Einleitung, die den Besucher abholt.')}
         </p>
       </section>
 
@@ -116,7 +117,7 @@ export default function LandingTemplate() {
       <section className="px-6 pb-20">
         <form onSubmit={handleSubmit} className="max-w-lg mx-auto space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
           <div className="space-y-2">
-            <Label htmlFor="example_field">Beispiel-Feld *</Label>
+            <Label htmlFor="example_field">{tx('Beispiel-Feld *')}</Label>
             <Input
               id="example_field"
               required
@@ -139,14 +140,14 @@ export default function LandingTemplate() {
           )}
 
           <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? 'Wird gesendet...' : 'Absenden'}
+            {submitting ? tx('Wird gesendet...') : tx('Absenden')}
           </Button>
         </form>
       </section>
 
       {/* ─── FOOTER — optional, agent may replace or remove ─── */}
       <footer className="px-6 py-6 text-center text-xs text-muted-foreground">
-        Powered by Klar
+        {tx('Powered by Klar')}
       </footer>
     </div>
   );

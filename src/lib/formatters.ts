@@ -1,19 +1,23 @@
 import { format, parseISO } from 'date-fns';
-import { de } from 'date-fns/locale';
+import { CURRENCY, dateFnsLocale, dateFormat, dateTimeFormat, localeTag } from '@/i18n';
 
+// Pattern, month/weekday names and number grouping all follow the ACTIVE
+// locale — read inside the functions, never hoisted, so a language switch
+// takes effect without a rebuild. The currency itself is a property of the
+// data and stays fixed at the build-time choice (CURRENCY).
 export function formatDate(s: string | undefined) {
   if (!s) return '—';
-  try { return format(parseISO(s), 'dd.MM.yyyy', { locale: de }); } catch { return s; }
+  try { return format(parseISO(s), dateFormat(), { locale: dateFnsLocale() }); } catch { return s; }
 }
 
 export function formatDateTime(s: string | undefined) {
   if (!s) return '—';
-  try { return format(parseISO(s), 'dd.MM.yyyy, HH:mm', { locale: de }); } catch { return s; }
+  try { return format(parseISO(s), dateTimeFormat(), { locale: dateFnsLocale() }); } catch { return s; }
 }
 
 export function formatCurrency(v: number | undefined) {
   if (v == null) return '—';
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(v);
+  return new Intl.NumberFormat(localeTag(), { style: 'currency', currency: CURRENCY }).format(v);
 }
 
 /** Extract display label from lookup/select or lookup/radio API response */

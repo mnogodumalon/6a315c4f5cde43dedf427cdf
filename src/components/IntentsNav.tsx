@@ -1,72 +1,94 @@
-import { NavLink } from 'react-router-dom';
-import { IconWand } from '@tabler/icons-react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { INTENTS, INTENTS_PENDING } from '@/config/intents';
+import { t, locale } from '@/i18n';
 
 /**
- * IntentsNav — sidebar section for intent workflow pages ("Abläufe").
+ * IntentsNav — Drawer-Sektion für Intent-Workflow-Seiten ("Abläufe").
  *
- * Renders automatically from the `src/config/intents.ts` registry: as soon as
- * the intents orchestrator registers a page there, it appears here — no
- * Layout edit. Active route gets the sidebar-accent highlight; `onNavigate`
- * lets the Layout close the mobile sidebar on click.
+ * Rendert eine <la-nav> (LivingApps Web Component) im select-Modus aus dem
+ * `src/config/intents.ts`-Registry: sobald der Intents-Orchestrator dort eine
+ * Seite registriert, taucht sie hier auf — kein Layout-Edit nötig. Der
+ * Aktiv-Zustand läuft über das `here`-Flag der Items (host-kontrolliert: bei
+ * jedem Routenwechsel wird data-nav neu gesetzt, was die interne Auswahl der
+ * la-nav zurücksetzt). `nav:select` wird auf React-Routers navigate() gemappt.
  *
- * While INTENTS_PENDING (the Phase-1 deploy window) the section shows ghost
- * shimmer rows instead — the workflows announce themselves in the nav, not as
- * placeholder cards on the dashboard. Empty AND not pending → nothing.
+ * Während INTENTS_PENDING (Phase-1-Deploy-Fenster) zeigt die la-nav ihr
+ * eingebautes pending-Rendering (pulsierende Zeile). Leer UND nicht pending
+ * → nichts.
  */
-const HEADING = 'Abläufe';
-const PENDING_TEXT = 'Werden erstellt …';
+type LaNavItem = { title: string; url?: string; here?: boolean; pending?: boolean; meta?: { path: string } };
 
-export function IntentsNav({ onNavigate }: { onNavigate?: () => void }) {
+export function IntentsNav() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const navRef = useRef<HTMLElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // Die Gruppe startet ZUgeklappt (Figma-Muster). Das Widget kennt kein
+  // steuerbares collapsed-Attribut (foldable/collapsed sind in der aktuellen
+  // Release wirkungslos) — deshalb einmalig beim Mount den aria-Toggle im
+  // Shadow klicken; der [aria-expanded="true"]-Guard trifft nur eine offene
+  // Sektion. Interval-Fallback, weil der Loader asynchron lädt. Während
+  // INTENTS_PENDING bleibt die Gruppe offen (Ghost-Zeile sichtbar).
+  useEffect(() => {
+    if (INTENTS.length === 0 || INTENTS_PENDING) return;
+    const collapse = () => {
+      const btn = sectionRef.current?.shadowRoot?.querySelector<HTMLButtonElement>('button[aria-expanded="true"]');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    };
+    if (collapse()) return;
+    const timer = window.setInterval(() => { if (collapse()) window.clearInterval(timer); }, 250);
+    const stop = window.setTimeout(() => window.clearInterval(timer), 5000);
+    return () => { window.clearInterval(timer); window.clearTimeout(stop); };
+  }, []);
+
+  const itemsJson = useMemo(() => {
+    let items: LaNavItem[];
+    if (INTENTS.length === 0) {
+      items = INTENTS_PENDING ? [{ title: t('intents_pending'), pending: true }] : [];
+    } else {
+      items = INTENTS.map(intent => ({
+        // Multilingual labels pick the active locale; legacy plain strings
+        // render as-is (pre-i18n dashboards).
+        title: typeof intent.label === 'string'
+          ? intent.label
+          : (intent.label as Record<string, string | undefined>)[locale] ?? intent.label.de ?? intent.label.en ?? intent.label.cs ?? '',
+        url: `#${intent.path}`,
+        here: location.pathname === intent.path,
+        meta: { path: intent.path },
+      }));
+    }
+    return JSON.stringify(items);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const handler = (e: Event) => {
+      const path = (e as CustomEvent<{ meta?: { path?: string } }>).detail?.meta?.path;
+      if (!path) return;
+      navigate(path);
+      // select-Modus verhindert den nativen Klick, daher kollabiert der
+      // Drawer sein mobiles Vollbild-Overlay nicht selbst — hier nachziehen.
+      if (window.matchMedia('(max-width: 767.98px)').matches) {
+        el.closest('la-drawer')?.setAttribute('collapsed', '');
+      }
+    };
+    el.addEventListener('nav:select', handler);
+    return () => el.removeEventListener('nav:select', handler);
+  }, [navigate]);
+
   if (INTENTS.length === 0 && !INTENTS_PENDING) return null;
 
-  if (INTENTS.length === 0) {
-    return (
-      <nav className="px-3 pt-4" aria-label={HEADING}>
-        <p className="px-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">
-          {HEADING}
-        </p>
-        <div className="space-y-0.5" aria-hidden>
-          {['w-28', 'w-36'].map(w => (
-            <div key={w} className="flex items-center gap-2 px-4 py-2 opacity-60">
-              <div className="h-4 w-4 shrink-0 rounded bg-sidebar-accent animate-pulse" />
-              <div className={`h-3 ${w} rounded bg-sidebar-accent animate-pulse`} />
-            </div>
-          ))}
-        </div>
-        <p className="px-4 pt-1 text-xs text-sidebar-foreground/50">{PENDING_TEXT}</p>
-      </nav>
-    );
-  }
-
   return (
-    <nav className="px-3 pt-4" aria-label={HEADING}>
-      <p className="px-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">
-        {HEADING}
-      </p>
-      <div className="space-y-0.5">
-        {INTENTS.map(intent => {
-          const Icon = intent.icon ?? IconWand;
-          return (
-            <NavLink
-              key={intent.path}
-              to={intent.path}
-              title={intent.description}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                `flex items-center gap-2 px-4 py-2 rounded-2xl text-base transition-colors min-w-0 font-normal ${
-                  isActive
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground'
-                }`
-              }
-            >
-              <Icon size={16} className="shrink-0 text-sidebar-foreground/70" />
-              <span className="truncate">{intent.label}</span>
-            </NavLink>
-          );
-        })}
-      </div>
-    </nav>
+    // primary = aufklappbare Gruppe INNERHALB der Aktionen-Sektion (Layout),
+    // gleiches Muster wie „Datenverwaltung" unter Darstellung. dense = die
+    // kleinere Unterpunkt-Schrift (--la-nav-text-size), wie im Gateway.
+    <la-nav-section ref={sectionRef} type="primary" label={t('intents_heading')} dense="">
+      <la-nav ref={navRef} mode="select" data-nav={itemsJson} />
+    </la-nav-section>
   );
 }

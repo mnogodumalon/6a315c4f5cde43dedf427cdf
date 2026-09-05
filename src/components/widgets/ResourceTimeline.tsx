@@ -147,7 +147,8 @@
  *     weekStartsOn?          0 | 1   (default 1 = Monday)
  *     weekDays?              5 | 7   (day axis, WEEK range only: 5 = working week, Sat+Sun hidden.
  *                                     2weeks/month always show all days. Default 7)
- *     locale?                date-fns Locale  (pass `de` for German names)
+ *     locale?                date-fns Locale  (pass dateFnsLocale() from '@/i18n' — never
+ *                            pin a fixed locale like `de`; dates must follow the language switch)
  *     onEventClick?          (event: ResourceEvent) => void              — open a <RecordOverlay>
  *     onEmptyClick?          (date: Date, group?: string) => void        — click EMPTY space: open a PREFILLED create dialog.
  *                                                                    `group` is the resource's opaque key — this widget ALWAYS
@@ -253,6 +254,9 @@ import {
   usePointerDrag, useNow, useRejectNotice, useNarrowContainer, useCoarsePointer,
   type DragGesture, type DragMode, type WriteResult,
 } from './primitives';
+// `Locale` above is date-fns' (the consumer's date-format locale) — the UI
+// language is a separate axis and comes from the runtime layer.
+import { coreLocale as i18nLocale, type CoreLocale as UiLocale } from '@/i18n';
 
 /** The closed tone palette as a referenceable array (don't transcribe the union).
  *  ResourceTone is derived from it, so the array and the type can never drift. */
@@ -636,9 +640,24 @@ function rangeColFloorPx(range: ResourceRange): number {
   return 88;
 }
 
-const RANGE_LABELS: Record<ResourceRange, string> = {
-  week: 'Woche', '2weeks': '2 Wochen', month: 'Monat',
+const RANGE_LABELS: Record<UiLocale, Record<ResourceRange, string>> = {
+  de: { week: 'Woche', '2weeks': '2 Wochen', month: 'Monat' },
+  en: { week: 'Week', '2weeks': '2 weeks', month: 'Month' },
 };
+
+// The widget's OWN chrome strings. Indexed at RENDER time (`RT_TEXTS[i18nLocale]`)
+// — never hoisted into a module constant, or a language switch would not reach it.
+const RT_TEXTS: Record<UiLocale, { prev: string; next: string; today: string; dismiss: string }> = {
+  de: { prev: 'Zurück', next: 'Weiter', today: 'Heute', dismiss: 'Meldung schließen' },
+  en: { prev: 'Back', next: 'Forward', today: 'Today', dismiss: 'Dismiss message' },
+};
+
+// Nights are a COUNTED noun: German has two forms, Czech three (1 noc,
+// 2–4 noci, 5+ nocí) — so the plural rule lives in a function, not in a dict.
+function nightsLabel(n: number, l: UiLocale): string {
+  if (l === 'en') return `${n} ${n === 1 ? 'night' : 'nights'}`;
+  return `${n} ${n === 1 ? 'Nacht' : 'Nächte'}`;
+}
 
 // The day-axis range label: a date span for week/2weeks, the month name otherwise.
 function dayRangeTitle(range: ResourceRange, days: Date[], locale?: Locale, narrow = false): string {
@@ -663,6 +682,8 @@ type ResourceToolbarProps = {
 };
 
 function ResourceToolbar({ axis, range, onRangeChange, title, onPrev, onToday, onNext, narrow = false }: ResourceToolbarProps) {
+  const rt = RT_TEXTS[i18nLocale];
+  const rangeLabels = RANGE_LABELS[i18nLocale];
   // Phone layout: nav row (title takes the free space, truncated) + the range
   // switch as a FULL-WIDTH segment grid — left-hugging pills next to dead
   // space read as unfinished on a phone.
@@ -673,11 +694,11 @@ function ResourceToolbar({ axis, range, onRangeChange, title, onPrev, onToday, o
       <div className="space-y-2 border-b border-input bg-secondary px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex h-8 shrink-0 items-stretch divide-x divide-input overflow-hidden rounded-full border border-input bg-card shadow-sm">
-            <button type="button" onClick={onPrev} aria-label="Zurück" className="flex w-9 items-center justify-center text-foreground active:bg-muted">
+            <button type="button" onClick={onPrev} aria-label={rt.prev} className="flex w-9 items-center justify-center text-foreground active:bg-muted">
               <IconChevronLeft className="h-4 w-4" />
             </button>
-            <button type="button" onClick={onToday} className="px-3 text-[13px] font-medium text-foreground active:bg-muted">Heute</button>
-            <button type="button" onClick={onNext} aria-label="Weiter" className="flex w-9 items-center justify-center text-foreground active:bg-muted">
+            <button type="button" onClick={onToday} className="px-3 text-[13px] font-medium text-foreground active:bg-muted">{rt.today}</button>
+            <button type="button" onClick={onNext} aria-label={rt.next} className="flex w-9 items-center justify-center text-foreground active:bg-muted">
               <IconChevronRight className="h-4 w-4" />
             </button>
           </div>
@@ -692,7 +713,7 @@ function ResourceToolbar({ axis, range, onRangeChange, title, onPrev, onToday, o
                 onClick={() => onRangeChange(r)}
                 className={`truncate rounded-full px-1 text-center text-[13px] font-medium transition-colors ${range === r ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'}`}
               >
-                {RANGE_LABELS[r]}
+                {rangeLabels[r]}
               </button>
             ))}
           </div>
@@ -704,11 +725,11 @@ function ResourceToolbar({ axis, range, onRangeChange, title, onPrev, onToday, o
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-input bg-secondary px-4 py-2.5">
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={onPrev} aria-label="Zurück">
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={onPrev} aria-label={rt.prev}>
           <IconChevronLeft className="h-4 w-4" />
         </Button>
-        <Button variant="outline" size="sm" className="h-8" onClick={onToday}>Heute</Button>
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={onNext} aria-label="Weiter">
+        <Button variant="outline" size="sm" className="h-8" onClick={onToday}>{rt.today}</Button>
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={onNext} aria-label={rt.next}>
           <IconChevronRight className="h-4 w-4" />
         </Button>
         <h2 className="ml-1 text-base font-semibold capitalize text-foreground">{title}</h2>
@@ -722,7 +743,7 @@ function ResourceToolbar({ axis, range, onRangeChange, title, onPrev, onToday, o
               onClick={() => onRangeChange(r)}
               className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${range === r ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             >
-              {RANGE_LABELS[r]}
+              {rangeLabels[r]}
             </button>
           ))}
         </div>
@@ -899,7 +920,7 @@ export function ResourceTimeline(props: ResourceTimelineProps) {
         const ev = safeEvents.find(e => e.id === dnd.draggingId);
         if (!ev) return null;
         return createPortal(
-          <div ref={dnd.ghostRef} className="pointer-events-none fixed left-0 top-0 z-[100] will-change-transform" aria-hidden>
+          <div ref={dnd.ghostRef} className="pointer-events-none fixed left-0 top-0 z-[var(--z-drag)] will-change-transform" aria-hidden>
             <div className={`flex max-w-[240px] items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold shadow-xl ring-1 ring-black/10 ${TONE_BAR[ev.tone ?? 'default']}`}>
               <span className="truncate">{ev.title}</span>
             </div>
@@ -926,7 +947,7 @@ export function ResourceTimeline(props: ResourceTimelineProps) {
           <div role="status" aria-live="polite" className="flex items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
             <IconAlertCircle size={16} className="shrink-0" />
             <span className="min-w-0 flex-1">{reject.notice}</span>
-            <button type="button" onClick={reject.dismiss} aria-label="Meldung schließen" className="shrink-0 rounded p-0.5 transition-colors hover:bg-destructive/10">
+            <button type="button" onClick={reject.dismiss} aria-label={RT_TEXTS[i18nLocale].dismiss} className="shrink-0 rounded p-0.5 transition-colors hover:bg-destructive/10">
               <IconX size={14} />
             </button>
           </div>
@@ -1084,7 +1105,7 @@ function PreviewBar({ p, days, tone, lane }: { p: DragPreview; days: Date[]; ton
   const span = Math.max(1, differenceInCalendarDays(segEnd, segStart) + 1);
   const nights = Math.max(1, differenceInCalendarDays(startOfDay(p.end), startOfDay(p.start)));
   const label = p.allDay
-    ? `${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}`
+    ? nightsLabel(nights, i18nLocale)
     : `${format(p.start, 'd. MMM')} – ${format(p.end, 'd. MMM')}`;
   return (
     <div

@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LivingAppsService } from '@/services/livingAppsService';
 import type { Buchung } from '@/types/app';
-import { APP_IDS, LOOKUP_OPTIONS } from '@/types/app';
+import { APP_IDS, LOOKUP_OPTIONS, lookupOption } from '@/types/app';
 import { lookupKey } from '@/lib/formatters';
 import {
   RecordOverlay,
@@ -40,14 +40,6 @@ const CARD_PREFIX = 'buchung';
 function buchungIdOf(card: KanbanCard): string {
   return card.id.split(':')[1] ?? '';
 }
-
-// Columns come from the SCHEMA, not from guesses: LOOKUP_OPTIONS holds every
-// static lookup's key→label pairs per app/field. The column ORDER is the
-// lookup's order — reorder here if the workflow reads differently.
-const COLUMNS: KanbanColumn[] = (LOOKUP_OPTIONS['buchung']?.['status'] ?? []).map(o => ({
-  key: o.key,
-  label: o.label,
-}));
 
 // tone is a CLOSED enum (KanbanTone) — `'danger'` does NOT exist. Map workflow
 // semantics, not decoration: the terminal stage reads muted, the active one
@@ -80,6 +72,20 @@ export function HotelKanbanExample() {
 
   useEffect(() => { void reload(); }, []);
 
+  // Columns come from the SCHEMA, not from guesses: LOOKUP_OPTIONS holds every
+  // static lookup's key→label pairs per app/field. The column ORDER is the
+  // lookup's order — reorder here if the workflow reads differently.
+  //
+  // INSIDE the component body, never at module scope: `o.label` is a
+  // locale-aware GETTER, so a module-scope derivation resolves once at import
+  // and freezes that language for the session (a Czech dashboard kept English
+  // kanban columns). check-dashboard gate 22 rejects the hoisted form — this
+  // example used to show it and walked a live build straight into the gate.
+  const COLUMNS = useMemo<KanbanColumn[]>(
+    () => (LOOKUP_OPTIONS['buchung']?.['status'] ?? []).map(o => ({ key: o.key, label: o.label })),
+    [],
+  );
+
   // Records → the widget's lean, data-agnostic card shape. The status FIELD
   // NAME lives HERE, in the consumer — never in the widget. `lookupKey()`
   // unwraps the LookupValue to its opaque key; an unset status maps to the
@@ -96,7 +102,7 @@ export function HotelKanbanExample() {
           tone: toneForStatus(status),
         };
       }),
-    [buchungen],
+    [buchungen, COLUMNS],
   );
 
   // Status change on drag. DRAG IS OFF until onCardMove is passed. Optimistic
@@ -114,7 +120,10 @@ export function HotelKanbanExample() {
     setBuchungen(prev =>
       prev.map(b =>
         b.record_id === rid
-          ? { ...b, fields: { ...b.fields, status: { key: newColumn, label: newColumn } } }
+          // lookupOption is the ONLY way to synthesize a LookupValue: it keeps
+          // the locale-aware label getter alive. A re-typed label freezes one
+          // language; `label: newColumn` prints the raw key in every list.
+          ? { ...b, fields: { ...b.fields, status: lookupOption('buchung', 'status', newColumn) } }
           : b,
       ),
     );

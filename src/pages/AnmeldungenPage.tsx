@@ -14,6 +14,7 @@ import { AnmeldungenDialog } from '@/components/dialogs/AnmeldungenDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
+import { t, appLabel, fieldLabel, lookupLabel } from '@/i18n';
 
 export default function AnmeldungenPage() {
   const navigate = useNavigate();
@@ -111,18 +112,18 @@ export default function AnmeldungenPage() {
 
   return (
     <PageShell
-      title="Anmeldungen"
-      subtitle={`${records.length} Anmeldungen im System`}
+      title={appLabel('anmeldungen')}
+      subtitle={`${records.length} ${t('in_system', { entity: appLabel('anmeldungen') })}`}
       action={
         <Button onClick={() => setDialogOpen(true)} className="shrink-0 rounded-full shadow-sm">
-          <IconPlus className="h-4 w-4 mr-2" /> Hinzufügen
+          <IconPlus className="h-4 w-4 mr-2" /> {t('add')}
         </Button>
       }
     >
       <div className="relative w-full max-w-sm">
         <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Anmeldungen suchen..."
+          placeholder={t('search_entity', { entity: appLabel('anmeldungen') })}
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="pl-9"
@@ -134,53 +135,53 @@ export default function AnmeldungenPage() {
             <TableRow className="border-b border-input">
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('veranstaltung')}>
                 <span className="inline-flex items-center gap-1">
-                  Veranstaltung
+                  {fieldLabel('anmeldungen', 'veranstaltung')}
                   {sortKey === 'veranstaltung' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('vorname')}>
                 <span className="inline-flex items-center gap-1">
-                  Vorname
+                  {fieldLabel('anmeldungen', 'vorname')}
                   {sortKey === 'vorname' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('nachname')}>
                 <span className="inline-flex items-center gap-1">
-                  Nachname
+                  {fieldLabel('anmeldungen', 'nachname')}
                   {sortKey === 'nachname' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('email_anmeldung')}>
                 <span className="inline-flex items-center gap-1">
-                  E-Mail-Adresse
+                  {fieldLabel('anmeldungen', 'email_anmeldung')}
                   {sortKey === 'email_anmeldung' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('telefon_anmeldung')}>
                 <span className="inline-flex items-center gap-1">
-                  Telefonnummer (optional)
+                  {fieldLabel('anmeldungen', 'telefon_anmeldung')}
                   {sortKey === 'telefon_anmeldung' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('anzahl_personen')}>
                 <span className="inline-flex items-center gap-1">
-                  Anzahl der Personen
+                  {fieldLabel('anmeldungen', 'anzahl_personen')}
                   {sortKey === 'anzahl_personen' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('anmerkungen')}>
                 <span className="inline-flex items-center gap-1">
-                  Anmerkungen
+                  {fieldLabel('anmeldungen', 'anmerkungen')}
                   {sortKey === 'anmerkungen' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('email_benachrichtigung')}>
                 <span className="inline-flex items-center gap-1">
-                  Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden.
+                  {fieldLabel('anmeldungen', 'email_benachrichtigung')}
                   {sortKey === 'email_benachrichtigung' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
-              <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">Aktionen</TableHead>
+              <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">{t('actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -193,7 +194,7 @@ export default function AnmeldungenPage() {
                 <TableCell>{record.fields.telefon_anmeldung ?? '—'}</TableCell>
                 <TableCell>{record.fields.anzahl_personen ?? '—'}</TableCell>
                 <TableCell className="max-w-xs"><span className="truncate block">{record.fields.anmerkungen ?? '—'}</span></TableCell>
-                <TableCell><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${record.fields.email_benachrichtigung ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>{record.fields.email_benachrichtigung ? 'Ja' : 'Nein'}</span></TableCell>
+                <TableCell><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${record.fields.email_benachrichtigung ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>{record.fields.email_benachrichtigung ? t('yes') : t('no')}</span></TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" onClick={() => setEditingRecord(record)}>
@@ -209,7 +210,7 @@ export default function AnmeldungenPage() {
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={9} className="text-center py-16 text-muted-foreground">
-                  {search ? 'Keine Ergebnisse gefunden.' : 'Noch keine Anmeldungen. Jetzt hinzufügen!'}
+                  {search ? t('no_results') : t('no_data_yet', { entity: appLabel('anmeldungen') })}
                 </TableCell>
               </TableRow>
             )}
@@ -232,8 +233,8 @@ export default function AnmeldungenPage() {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        title="Anmeldungen löschen"
-        description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
+        title={t('delete_entity', { entity: appLabel('anmeldungen') })}
+        description={t('confirm_delete_desc')}
       />
 
     </PageShell>

@@ -1,7 +1,14 @@
 /**
  * CalendarWidget — pre-generated calendar widget set (Archetype B).
  *
- * @version 2.9.2
+ * @version 2.10.0
+ * @since 2026-06-30  (2.10.0: POINT-CREATE — when only `onEmptyClick` is wired
+ *                     (a single date field: a start, no end), a drag no longer
+ *                     draws a start→end range it cannot store. It scrubs ONLY
+ *                     the start under the pointer (a zero-length phantom) and,
+ *                     on release, commits that start via onEmptyClick — the same
+ *                     path a tap takes. `onRangeCreate` (start+end fields) is
+ *                     unchanged and takes precedence when both are wired.
  * @since 2026-06-12  (2.9.2: FIT-TO-VIEWPORT, corrected — the WHOLE widget
  *                     card (toolbar + day heads + grid) now fits inside the
  *                     viewport height: the grid budget is viewport minus the
@@ -130,7 +137,8 @@
  *     weekDays?              5 | 7   (WEEK view only: 5 = working week, Sat+Sun hidden — office
  *                                     schedules, content plans. Month/agenda/year always show all
  *                                     days; events on hidden days simply don't render. Default 7)
- *     locale?                date-fns Locale  (pass `de` for German weekday/month names)
+ *     locale?                date-fns Locale  (pass dateFnsLocale() from '@/i18n' — never
+ *                            pin a fixed locale like `de`; dates must follow the language switch)
  *     maxEventsPerDay?       number  (month overflow threshold; default 3)
  *     dayStartHour?          number  (week grid; default 7)
  *     dayEndHour?            number  (week grid; default 21)
@@ -147,7 +155,11 @@
  *                                                              (ResourceTimeline supplies the resource row); HERE `group` is
  *                                                              ALWAYS undefined — the calendar has no second axis. In the hour
  *                                                              grid the Date carries the clicked CLOCK TIME (Y → snapped minute);
- *                                                              in month/board it is midnight (day only).
+ *                                                              in month/board it is midnight (day only). POINT-CREATE: if you wire
+ *                                                              this but NOT onRangeCreate (a single date field — a start, no end),
+ *                                                              a drag-to-create scrubs ONLY the start and fires THIS callback on
+ *                                                              release. Use it for single-date entities; use onRangeCreate when
+ *                                                              the entity has a separate start AND end field.
  *     onEventDrop?           (eventId, newStart, newEnd?) => void | string | Promise<void | string>  — reschedule; DRAG IS OFF until you
  *                                                              pass this (consumer PATCHes + re-fetches). In the hour grid newStart
  *                                                              carries the dropped clock time; month/board stay day-granular.
@@ -158,8 +170,10 @@
  *                                                              REJECTION CHANNEL (both drop + resize): return a STRING to block the
  *                                                              gesture — the widget snaps back and shows the reason in its built-in
  *                                                              notice. Check the rule FIRST, return the message INSTEAD of patching.
- *     onRangeCreate?         (start: Date, end: Date, group?: string) => void  — DRAG-TO-CREATE on empty space; OFF until you
- *                                                              pass this (a plain tap still fires onEmptyClick). Month: drag across
+ *     onRangeCreate?         (start: Date, end: Date, group?: string) => void  — DRAG-TO-CREATE a start→end RANGE on empty space;
+ *                                                              for an entity with a SEPARATE start AND end field. OFF until you
+ *                                                              pass this (a plain tap still fires onEmptyClick; a single date field
+ *                                                              should wire onEmptyClick for point-create instead). Month: drag across
  *                                                              cells → day range, midnights, end day INCLUSIVE (like an all-day
  *                                                              event). Hour grid: drag vertically → clock times, snapped to
  *                                                              dragSnapMinutes, min one snap step. Fires DATES (like onEmptyClick),
@@ -217,9 +231,16 @@
  *    reason — the user sees a widget that disobeys for no visible cause. And
  *    the inverse: returning the string AND rendering your own banner = double
  *    notice. Return the string; the widget owns the display.
- *  • treating `onRangeCreate`'s args like onEventDrop's — they are DATES, not ISO
- *    strings. Format them yourself (`format(start, 'yyyy-MM-dd')` for date/date,
- *    ISO_T-style for datetimeminute); writing the Date object raw fails the API.
+ *  • DROPPING THE CLOCK TIME on create — the #1 calendar-create bug. onEmptyClick
+ *    AND onRangeCreate hand you a Date that, IN THE HOUR GRID (week/day view),
+ *    carries the CLICKED TIME. Format it ONTO THE FIELD TYPE before writing:
+ *      – date-only field  (`date/date`)          → `format(d, 'yyyy-MM-dd')`
+ *      – datetime field   (`date/datetimeminute`)→ `format(d, "yyyy-MM-dd'T'HH:mm")`
+ *    (the scaffold DatePicker round-trips EXACTLY these formats). Using
+ *    `'yyyy-MM-dd'` for a datetime field silently pins every new record to 00:00 —
+ *    if "the clicked time is lost / always midnight", THIS is why. (The args are
+ *    DATES, not ISO strings like onEventDrop; writing the Date object raw also
+ *    fails the API.)
  *
  * ─── When to use ──────────────────────────────────────────────────────
  *
@@ -274,6 +295,9 @@ import {
   usePointerDrag, useNow, useRejectNotice, useNarrowContainer, useCoarsePointer,
   type DragGesture, type DragMode, type TimeSpan, type WriteResult,
 } from './primitives';
+// `Locale` above is date-fns' (the consumer's date-format locale) — the UI
+// language is a separate axis and comes from the runtime layer.
+import { coreLocale as i18nLocale, type CoreLocale as UiLocale } from '@/i18n';
 
 // Closed enums — exported as const arrays so consumers reference instead of
 // transcribe (a mistyped 'danger' was a real build failure). The union types are
@@ -377,8 +401,29 @@ export function visibleRange(cursor: Date, view: CalendarView, weekStartsOn: 0 |
 
 // ── Toolbar ─────────────────────────────────────────────────────────────
 
-const VIEW_LABELS: Record<CalendarView, string> = {
-  month: 'Monat', week: 'Woche', day: 'Tag', agenda: 'Agenda', year: 'Jahr',
+const VIEW_LABELS: Record<UiLocale, Record<CalendarView, string>> = {
+  de: { month: 'Monat', week: 'Woche', day: 'Tag', agenda: 'Agenda', year: 'Jahr' },
+  en: { month: 'Month', week: 'Week', day: 'Day', agenda: 'Agenda', year: 'Year' },
+};
+
+// The widget's OWN chrome strings. Indexed at RENDER time (`CAL_TEXTS[i18nLocale]`)
+// — never hoisted into a module constant, or a language switch would not reach it.
+const CAL_TEXTS: Record<UiLocale, {
+  threeDays: string; prev: string; next: string; today: string; dismiss: string;
+  allDay: string; noEventsInRange: string; noEventsOnDay: string;
+}> = {
+  de: {
+    threeDays: '3 Tage', prev: 'Zurück', next: 'Weiter', today: 'Heute',
+    dismiss: 'Meldung schließen', allDay: 'Ganztags',
+    noEventsInRange: 'Keine Termine in diesem Zeitraum.',
+    noEventsOnDay: 'Keine Termine an diesem Tag.',
+  },
+  en: {
+    threeDays: '3 days', prev: 'Back', next: 'Forward', today: 'Today',
+    dismiss: 'Dismiss message', allDay: 'All day',
+    noEventsInRange: 'No events in this period.',
+    noEventsOnDay: 'No events on this day.',
+  },
 };
 
 type CalendarToolbarProps = {
@@ -393,6 +438,8 @@ type CalendarToolbarProps = {
 
 export function CalendarToolbar({ calendar, locale, views = ['month', 'week', 'day', 'agenda'], className, narrow = false }: CalendarToolbarProps) {
   const { view, cursor } = calendar;
+  const ct = CAL_TEXTS[i18nLocale];
+  const viewLabels = VIEW_LABELS[i18nLocale];
   // Phone toolbar gets its own COMPACT title (no year, short month) — the
   // desktop title wraps into a two-line mess at 390px.
   const title = narrow
@@ -404,7 +451,7 @@ export function CalendarToolbar({ calendar, locale, views = ['month', 'week', 'd
       : view === 'day' ? format(cursor, 'EEEE, d. MMMM yyyy', { locale })
       : view === 'week' ? `${format(calendar.range.from, 'd. MMM', { locale })} – ${format(calendar.range.to, 'd. MMM yyyy', { locale })}`
       : format(cursor, 'MMMM yyyy', { locale }));
-  const pillLabel = (v: CalendarView) => (narrow && v === 'week' ? '3 Tage' : VIEW_LABELS[v]);
+  const pillLabel = (v: CalendarView) => (narrow && v === 'week' ? ct.threeDays : viewLabels[v]);
 
   // Phone layout: nav row (title takes the free space, truncated) + the view
   // switch as a FULL-WIDTH segment grid — left-hugging pills next to dead
@@ -417,11 +464,11 @@ export function CalendarToolbar({ calendar, locale, views = ['month', 'week', 'd
       <div className={`space-y-2${className ? ` ${className}` : ''}`}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex h-8 shrink-0 items-stretch divide-x divide-input overflow-hidden rounded-full border border-input bg-card shadow-sm">
-            <button type="button" onClick={calendar.prev} aria-label="Zurück" className="flex w-9 items-center justify-center text-foreground active:bg-muted">
+            <button type="button" onClick={calendar.prev} aria-label={ct.prev} className="flex w-9 items-center justify-center text-foreground active:bg-muted">
               <IconChevronLeft className="h-4 w-4" />
             </button>
-            <button type="button" onClick={calendar.today} className="px-3 text-[13px] font-medium text-foreground active:bg-muted">Heute</button>
-            <button type="button" onClick={calendar.next} aria-label="Weiter" className="flex w-9 items-center justify-center text-foreground active:bg-muted">
+            <button type="button" onClick={calendar.today} className="px-3 text-[13px] font-medium text-foreground active:bg-muted">{ct.today}</button>
+            <button type="button" onClick={calendar.next} aria-label={ct.next} className="flex w-9 items-center justify-center text-foreground active:bg-muted">
               <IconChevronRight className="h-4 w-4" />
             </button>
           </div>
@@ -446,11 +493,11 @@ export function CalendarToolbar({ calendar, locale, views = ['month', 'week', 'd
   return (
     <div className={`flex flex-wrap items-center justify-between gap-3${className ? ` ${className}` : ''}`}>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={calendar.prev} aria-label="Zurück">
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={calendar.prev} aria-label={ct.prev}>
           <IconChevronLeft className="h-4 w-4" />
         </Button>
-        <Button variant="outline" size="sm" className="h-8" onClick={calendar.today}>Heute</Button>
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={calendar.next} aria-label="Weiter">
+        <Button variant="outline" size="sm" className="h-8" onClick={calendar.today}>{ct.today}</Button>
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={calendar.next} aria-label={ct.next}>
           <IconChevronRight className="h-4 w-4" />
         </Button>
         <h2 className="ml-1 text-base font-semibold text-foreground capitalize">{title}</h2>
@@ -600,7 +647,7 @@ export function CalendarWidget(props: CalendarWidgetProps) {
           <div role="status" aria-live="polite" className="flex items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
             <IconAlertCircle size={16} className="shrink-0" />
             <span className="min-w-0 flex-1">{reject.notice}</span>
-            <button type="button" onClick={reject.dismiss} aria-label="Meldung schließen" className="shrink-0 rounded p-0.5 transition-colors hover:bg-destructive/10">
+            <button type="button" onClick={reject.dismiss} aria-label={CAL_TEXTS[i18nLocale].dismiss} className="shrink-0 rounded p-0.5 transition-colors hover:bg-destructive/10">
               <IconX size={14} />
             </button>
           </div>
@@ -700,7 +747,15 @@ function useEventDrag(
   onEventResize?: ViewContext['onEventResize'],
   onRangeCreate?: ViewContext['onRangeCreate'],
   dragSnapMinutes = 15,
+  onEmptyClick?: ViewContext['onEmptyClick'],
 ) {
+  // POINT-CREATE: a single-date entity (only a start field, no end) wires
+  // `onEmptyClick` but NOT `onRangeCreate`. Then a drag must NOT draw a
+  // start→end range it cannot store — it scrubs ONLY the start under the
+  // pointer (a zero-length phantom) and, on release, commits that start via
+  // onEmptyClick (the same path a tap takes). `onRangeCreate` (start+end
+  // fields) keeps the range behaviour and wins when both are wired.
+  const pointCreate = !onRangeCreate && !!onEmptyClick;
   // Resolve the live preview from the cursor. Pure geometry + date math; sets no
   // app state — only the local preview/highlight the views paint. Returns the
   // snapped {start,end} or null when the cursor is off any cell. (A plain
@@ -717,16 +772,22 @@ function useEventDrag(
       // Drag-to-create: the phantom event's `start` is the ANCHOR (where the
       // gesture began); the cursor sets the other edge. Hour grid → clock
       // times (min one snap step); month → day range (end day inclusive).
+      // POINT-CREATE (single date field): there is no end to set — the phantom
+      // is a ZERO-LENGTH marker that simply FOLLOWS the cursor, so the user
+      // scrubs only the start. It renders as a min-height block / single-day chip.
       const anchor = eventStart(ev);
       if (minute != null) {
         const cur = setMinutesOfDay(startOfDay(day), minute);
+        if (pointCreate) return { id: CREATE_ID, start: cur, end: cur, allDay: false, mode: g.mode };
         const lo = minDate([anchor, cur]);
         let hi = maxDate([anchor, cur]);
         const snap = Math.max(1, dragSnapMinutes);
         if (differenceInMinutes(hi, lo) < snap) hi = addMinutes(lo, snap);
         return { id: CREATE_ID, start: lo, end: hi, allDay: false, mode: g.mode };
       }
-      const a = startOfDay(anchor), d = startOfDay(day);
+      const d = startOfDay(day);
+      if (pointCreate) return { id: CREATE_ID, start: d, end: d, allDay: true, mode: g.mode };
+      const a = startOfDay(anchor);
       return { id: CREATE_ID, start: minDate([a, d]), end: maxDate([a, d]), allDay: true, mode: g.mode };
     }
 
@@ -778,7 +839,7 @@ function useEventDrag(
   return usePointerDrag<CalendarEvent, Geometry, DragPreview>({
     moveEnabled: !!onEventDrop,
     resizeEnabled: !!onEventResize,
-    createEnabled: !!onRangeCreate,
+    createEnabled: !!onRangeCreate || !!onEmptyClick,
     grabDayAt: (geom, clientX, clientY) => geom.dayAt(clientX, clientY),
     resolve,
     targetKey: p => format(p.start, 'yyyy-MM-dd'),   // "yyyy-MM-dd" cell to highlight
@@ -791,6 +852,9 @@ function useEventDrag(
       if (g.mode === 'create') {
         // Drag-to-create commits DATES (like onEmptyClick) — the consumer
         // formats onto its field type. `group` stays undefined (no second axis).
+        // POINT-CREATE: only the start exists — commit it through onEmptyClick,
+        // the same path a tap takes, so a single-date entity never gets an end.
+        if (pointCreate) { onEmptyClick?.(p.start); return; }
         onRangeCreate?.(p.start, p.end);
         return;
       }
@@ -829,7 +893,7 @@ function DragGhost({ dnd, events }: { dnd: EventDrag; events: CalendarEvent[] })
   if (!ev) return null;
   const tone = ev.tone ?? 'default';
   return createPortal(
-    <div ref={dnd.ghostRef} className="pointer-events-none fixed left-0 top-0 z-[100] will-change-transform" aria-hidden>
+    <div ref={dnd.ghostRef} className="pointer-events-none fixed left-0 top-0 z-[var(--z-drag)] will-change-transform" aria-hidden>
       <div className={`flex max-w-[240px] items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold shadow-xl ring-1 ring-black/10 ${TONE_BAR[tone]}`}>
         {!isAllDay(ev) && <span className="shrink-0 tabular-nums opacity-80">{format(eventStart(ev), 'HH:mm')}</span>}
         <span className="truncate">{ev.title}</span>
@@ -848,7 +912,7 @@ function setMinutesOfDay(day: Date, minute: number): Date {
 
 function MonthView(ctx: ViewContext) {
   const { events, cursor, weekStartsOn, locale, maxEventsPerDay } = ctx;
-  const dnd = useEventDrag(ctx.onEventDrop, undefined, ctx.onRangeCreate, ctx.dragSnapMinutes);
+  const dnd = useEventDrag(ctx.onEventDrop, undefined, ctx.onRangeCreate, ctx.dragSnapMinutes, ctx.onEmptyClick);
   const ghost = <DragGhost dnd={dnd} events={events} />;
 
   const days = useMemo(() => {
@@ -1173,7 +1237,7 @@ function WeekView(ctx: ViewContext) {
   // start decides the resolution: all-day strip chips capture a day-granular
   // geometry (minuteAt null); hour-grid events capture a time-aware geometry
   // (Y → snapped minute). Both coexist without touching each other.
-  const dnd = useEventDrag(ctx.onEventDrop, ctx.onEventResize, ctx.onRangeCreate, ctx.dragSnapMinutes);
+  const dnd = useEventDrag(ctx.onEventDrop, ctx.onEventResize, ctx.onRangeCreate, ctx.dragSnapMinutes, ctx.onEmptyClick);
   const ghost = <DragGhost dnd={dnd} events={events} />;
   const days = useMemo(() => {
     // Phone layout: a 3-DAY WINDOW anchored at the cursor (the shell's nav
@@ -1316,7 +1380,7 @@ function WeekView(ctx: ViewContext) {
       {(!ctx.narrow || stripOnly || weekBars.length > 0 || stripPreviewBar != null
         || events.some(ev => isAllDay(ev) && !isMultiDay(ev) && days.some(d => occursOn(ev, d)))) && (
       <div className="flex border-b border-border">
-        <div className="w-14 shrink-0 px-1 py-1 text-right text-[10px] uppercase text-muted-foreground">Ganztags</div>
+        <div className="w-14 shrink-0 px-1 py-1 text-right text-[10px] uppercase text-muted-foreground">{CAL_TEXTS[i18nLocale].allDay}</div>
         <div className="relative grid flex-1" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
           {days.map((day, i) => {
             const iso = format(day, 'yyyy-MM-dd');
@@ -1475,7 +1539,9 @@ function WeekDayColumn({ day, events, ctx, dnd, geom, colRefs, hours, hourPx, da
   const previewTop = preview ? (differenceInMinutes(preview.start, dayStart) / 60) * hourPx : 0;
   const previewHeight = preview ? Math.max(18, (differenceInMinutes(preview.end, preview.start) / 60) * hourPx) : 18;
   const previewLabel = preview
-    ? (preview.mode === 'move' ? format(preview.start, 'HH:mm') : `${format(preview.start, 'HH:mm')}–${format(preview.end, 'HH:mm')}`)
+    ? (preview.mode === 'move' || differenceInMinutes(preview.end, preview.start) <= 0
+        ? format(preview.start, 'HH:mm')   // move OR point-create (zero-span) → just the start
+        : `${format(preview.start, 'HH:mm')}–${format(preview.end, 'HH:mm')}`)
     : '';
 
   return (
@@ -1670,12 +1736,12 @@ function YearView(ctx: ViewContext) {
 function AgendaView(ctx: ViewContext) {
   const { cursor, weekStartsOn } = ctx;
   const range = visibleRange(cursor, 'agenda', weekStartsOn);
-  return <EventList ctx={ctx} from={range.from} to={range.to} emptyLabel="Keine Termine in diesem Zeitraum." />;
+  return <EventList ctx={ctx} from={range.from} to={range.to} emptyLabel={CAL_TEXTS[i18nLocale].noEventsInRange} />;
 }
 
 function DayView(ctx: ViewContext) {
   const { cursor } = ctx;
-  return <EventList ctx={ctx} from={startOfDay(cursor)} to={startOfDay(cursor)} emptyLabel="Keine Termine an diesem Tag." />;
+  return <EventList ctx={ctx} from={startOfDay(cursor)} to={startOfDay(cursor)} emptyLabel={CAL_TEXTS[i18nLocale].noEventsOnDay} />;
 }
 
 function EventList({ ctx, from, to, emptyLabel }: { ctx: ViewContext; from: Date; to: Date; emptyLabel: string }) {
@@ -1710,7 +1776,7 @@ function EventList({ ctx, from, to, emptyLabel }: { ctx: ViewContext; from: Date
                 <button key={ev.id} type="button" onClick={() => ctx.onEventClick?.(ev)} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2 text-left hover:bg-muted min-w-0">
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${TONE_DOT[tone]}`} />
                   <span className="w-24 shrink-0 text-xs tabular-nums text-muted-foreground">
-                    {isAllDay(ev) ? 'Ganztags' : `${format(eventStart(ev), 'HH:mm')}${ev.end ? `–${format(eventEnd(ev), 'HH:mm')}` : ''}`}
+                    {isAllDay(ev) ? CAL_TEXTS[i18nLocale].allDay : `${format(eventStart(ev), 'HH:mm')}${ev.end ? `–${format(eventEnd(ev), 'HH:mm')}` : ''}`}
                   </span>
                   <span className="flex flex-col min-w-0">
                     <span className="truncate font-medium text-foreground">{ev.title}</span>

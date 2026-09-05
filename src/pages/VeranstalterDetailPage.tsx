@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
 import { formEnhancements } from '@/config/form-enhancements/Veranstalter';
 import { evalComputed } from '@/config/form-enhancements/types';
+import { t, appLabel, fieldLabel, localeTag, CURRENCY } from '@/i18n';
 
 export default function VeranstalterDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -56,11 +57,11 @@ export default function VeranstalterDetailPage() {
   if (!record) {
     return (
       <RecordViewEmpty
-        title="Eintrag nicht gefunden"
+        title={t('not_found')}
         action={
           <Button variant="ghost" onClick={() => navigate('/veranstalter')}>
             <IconArrowLeft className="h-4 w-4 mr-1.5" />
-            Zurück
+            {t('back')}
           </Button>
         }
       />
@@ -71,18 +72,18 @@ export default function VeranstalterDetailPage() {
     <RecordView
       onBack={() => navigate('/veranstalter')}
       onEdit={() => setEditing(true)}
-      backLabel="Zurück"
-      editLabel="Bearbeiten"
+      backLabel={t('back')}
+      editLabel={t('edit_button')}
     >
-      <RecordHeader title={record.fields.organisation_name ?? 'Veranstalter'} />
+      <RecordHeader title={record.fields.organisation_name ?? appLabel('veranstalter')} />
 
       {(() => {
         const lookupLists: Record<string, unknown> = {
         };
         const fmtComputed = (k: string, n: number) =>
           /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k)
-            ? n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-            : n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+            ? n.toLocaleString(localeTag(), { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : n.toLocaleString(localeTag(), { maximumFractionDigits: 2 });
         const computedFacts = Object.entries(formEnhancements.computed)
           .map(([key, formula]) => {
             const v = evalComputed(formula, record!.fields as Record<string, unknown>, { lookupLists });
@@ -94,19 +95,19 @@ export default function VeranstalterDetailPage() {
         return computedFacts.length > 0 ? <RecordKeyFacts items={computedFacts} /> : null;
       })()}
 
-      <RecordSection title="Details" cols={2}>
-        <RecordField label="Name der Organisation" value={record.fields.organisation_name} format="text" />
-        <RecordField label="Typ der Organisation" value={record.fields.organisation_typ} format="pill" />
-        <RecordField label="Vorname Ansprechpartner" value={record.fields.ansprechpartner_vorname} format="text" />
-        <RecordField label="Nachname Ansprechpartner" value={record.fields.ansprechpartner_nachname} format="text" />
-        <RecordField label="E-Mail-Adresse" value={record.fields.email} format="email" />
-        <RecordField label="Telefonnummer" value={record.fields.telefon} format="text" />
-        <RecordField label="Straße" value={record.fields.strasse} format="text" />
-        <RecordField label="Hausnummer" value={record.fields.hausnummer} format="text" />
-        <RecordField label="Postleitzahl" value={record.fields.plz} format="text" />
-        <RecordField label="Ort" value={record.fields.ort} format="text" />
-        <RecordField label="Website" value={record.fields.website} format="url" />
-        <RecordField label="Beschreibung der Organisation" value={record.fields.beschreibung} format="longtext" className="md:col-span-2" />
+      <RecordSection title={t('details')} cols={2}>
+        <RecordField label={fieldLabel('veranstalter', 'organisation_name')} value={record.fields.organisation_name} format="text" />
+        <RecordField label={fieldLabel('veranstalter', 'organisation_typ')} value={record.fields.organisation_typ} format="pill" />
+        <RecordField label={fieldLabel('veranstalter', 'ansprechpartner_vorname')} value={record.fields.ansprechpartner_vorname} format="text" />
+        <RecordField label={fieldLabel('veranstalter', 'ansprechpartner_nachname')} value={record.fields.ansprechpartner_nachname} format="text" />
+        <RecordField label={fieldLabel('veranstalter', 'email')} value={record.fields.email} format="email" />
+        <RecordField label={fieldLabel('veranstalter', 'telefon')} value={record.fields.telefon} format="text" />
+        <RecordField label={fieldLabel('veranstalter', 'strasse')} value={record.fields.strasse} format="text" />
+        <RecordField label={fieldLabel('veranstalter', 'hausnummer')} value={record.fields.hausnummer} format="text" />
+        <RecordField label={fieldLabel('veranstalter', 'plz')} value={record.fields.plz} format="text" />
+        <RecordField label={fieldLabel('veranstalter', 'ort')} value={record.fields.ort} format="text" />
+        <RecordField label={fieldLabel('veranstalter', 'website')} value={record.fields.website} format="url" />
+        <RecordField label={fieldLabel('veranstalter', 'beschreibung')} value={record.fields.beschreibung} format="longtext" className="md:col-span-2" />
       </RecordSection>
 
       <RecordAttachments appId={APP_IDS.VERANSTALTER} recordId={record.record_id} />
@@ -114,7 +115,7 @@ export default function VeranstalterDetailPage() {
       <div className="flex justify-end pt-2">
         <Button variant="ghost" onClick={() => setDeleteOpen(true)} className="text-destructive hover:text-destructive">
           <IconTrash className="h-4 w-4 mr-1.5" />
-          Löschen
+          {t('delete')}
         </Button>
       </div>
 
@@ -132,8 +133,8 @@ export default function VeranstalterDetailPage() {
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onConfirm={handleDelete}
-        title="Veranstalter löschen"
-        description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
+        title={t('delete_entity', { entity: appLabel('veranstalter') })}
+        description={t('confirm_delete_desc')}
       />
     </RecordView>
   );

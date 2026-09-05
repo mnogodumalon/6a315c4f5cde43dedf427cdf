@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { APP_IDS } from '@/types/app';
 import { createRecordUrl } from '@/services/livingAppsService';
+import { t } from '@/i18n';
 
 interface FieldDef {
   key: string;
@@ -74,13 +75,13 @@ export function BulkEditDialog({ open, onClose, onApply, fields, selectedCount, 
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Feld für ausgewählte Einträge bearbeiten</DialogTitle>
+          <DialogTitle>{t('bulk_edit_title')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label>Feld auswählen</Label>
+            <Label>{t('choose_field')}</Label>
             <Select value={selectedField} onValueChange={handleFieldChange}>
-              <SelectTrigger><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={t('select_placeholder')} /></SelectTrigger>
               <SelectContent>
                 {editableFields.map(f => (
                   <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
@@ -90,14 +91,14 @@ export function BulkEditDialog({ open, onClose, onApply, fields, selectedCount, 
           </div>
           {currentField && (
             <div className="space-y-2">
-              <Label>Neuer Wert</Label>
+              <Label>{t('new_value')}</Label>
               {currentField.type === 'bool' ? (
                 <div className="flex items-center gap-2">
                   <Checkbox
                     checked={!!value}
                     onCheckedChange={v => setValue(v)}
                   />
-                  <span className="text-sm">{value ? "Ja" : "Nein"}</span>
+                  <span className="text-sm">{value ? t('yes') : t('no')}</span>
                 </div>
               ) : currentField.type === 'string/textarea' ? (
                 <Textarea
@@ -126,7 +127,7 @@ export function BulkEditDialog({ open, onClose, onApply, fields, selectedCount, 
                 />
               ) : (currentField.type === 'lookup/select' || currentField.type === 'lookup/radio') && currentField.options ? (
                 <Select value={value ?? ''} onValueChange={v => setValue(v)}>
-                  <SelectTrigger><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t('select_placeholder')} /></SelectTrigger>
                   <SelectContent>
                     {currentField.options.map(o => (
                       <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>
@@ -135,7 +136,7 @@ export function BulkEditDialog({ open, onClose, onApply, fields, selectedCount, 
                 </Select>
               ) : currentField.type.includes('applookup') && currentField.targetEntity ? (
                 <Select value={value ?? 'none'} onValueChange={v => setValue(v)}>
-                  <SelectTrigger><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t('select_placeholder')} /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">—</SelectItem>
                     {(lookupLists?.[currentField.targetEntity + 'List'] ?? []).map((r: any) => (
@@ -155,9 +156,9 @@ export function BulkEditDialog({ open, onClose, onApply, fields, selectedCount, 
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Abbrechen</Button>
+          <Button variant="outline" onClick={onClose}>{t('cancel')}</Button>
           <Button onClick={handleApply} disabled={!selectedField || loading}>
-            {loading ? 'Wird angewendet...' : `Auf ${selectedCount} Einträge anwenden`}
+            {loading ? t('applying') : t('apply_to_n', { n: selectedCount })}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -54,8 +54,20 @@ export type ComputedContext = {
  * pure arithmetic. No fetch, no DOM, no localStorage from this surface.
  */
 export interface ComputedCtx {
-  /** Read a raw field value from the current form. */
-  field(key: string): unknown;
+  /**
+   * Read a form field AS A NUMBER — the accessor for arithmetic. Missing,
+   * empty or non-numeric values become 0, so no `?? 0` and no `Number(…)`
+   * wrapper are needed:  `ctx.num('preis') * 1.19`.
+   */
+  num(key: string): number;
+  /**
+   * Read a raw field value from the current form — for non-numeric reads
+   * (string compares, presence checks). Typed `any` deliberately: the values
+   * are dynamic form data, and an `unknown` return only ever bought TS2362
+   * build breaks in generated formula code. Use `num()` for arithmetic.
+   * Reads REAL form fields only — other `computed` keys are not in here.
+   */
+  field(key: string): any;
   /** Resolve an applookup field → numeric field on the target record. Returns null on miss. */
   applookup(ownKey: string, lookupKey: string): number | null;
   /** Read an arbitrary (non-numeric) lookup field from a resolved applookup target. */
@@ -64,8 +76,11 @@ export interface ComputedCtx {
   lookupKey(key: string): string | null;
   /** Difference between two date fields in days (default) or hours. Null when either is missing. */
   dateDiff(fromKey: string, toKey: string, unit?: 'days' | 'hours'): number | null;
-  /** Add days to a date field, return a Date or null. */
-  addDays(dateKey: string, days: number): Date | null;
+  // NOTE: there is deliberately no `addDays` — it returned a Date, and a
+  // ComputedFn can only ever return a number, so the only thing the helper
+  // ever produced was a TS2322 (live: a `faelligkeitsdatum` entry that built
+  // a 'yyyy-MM-dd' string from it). Date PREFILLS belong in `defaults`
+  // ({ kind: 'todayOffset', days: n }), never in `computed`.
   /**
    * Sum a per-item value over a multilookup field. The callback receives the
    * resolved record (with its fields). Items that throw or return non-finite
@@ -82,6 +97,10 @@ export interface ComputedCtx {
  * conditionals that the declarative spec can't express, the sub-agent may
  * emit a function instead. It MUST be pure: only fields + ctx in, number|null out.
  * Exceptions and non-finite returns are silently swallowed → no suggestion shown.
+ *
+ * NUMBERS ONLY. `computed` computes amounts, counts and durations — never a
+ * date string, never a label. A string return is a TS2322 that costs a build
+ * round, so parse-formulas drops such an entry before tsc sees it.
  */
 export type ComputedFn = (
   fields: Record<string, unknown>,
@@ -357,6 +376,13 @@ function buildComputedCtx(
   ctx: ComputedContext,
 ): ComputedCtx {
   return {
+    num(key) {
+      const v = data[key];
+      if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+      if (typeof v !== 'string' || !v.trim()) return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    },
     field(key) {
       return data[key];
     },
@@ -387,14 +413,6 @@ function buildComputedCtx(
       if (!Number.isFinite(ms)) return null;
       const div = unit === 'hours' ? 3_600_000 : 86_400_000;
       return Math.max(0, Math.round(ms / div));
-    },
-    addDays(dateKey, days) {
-      const s = data[dateKey];
-      if (typeof s !== 'string' || !s) return null;
-      const d = new Date(s);
-      if (!Number.isFinite(d.getTime())) return null;
-      d.setDate(d.getDate() + days);
-      return d;
     },
     sumOver(multilookupKey, perItem) {
       const urls = data[multilookupKey];

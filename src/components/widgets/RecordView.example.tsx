@@ -23,7 +23,7 @@ import { IconArrowLeft, IconTrash, IconBed, IconUser, IconCalendar } from '@tabl
 import { formatDate } from '@/lib/formatters';
 import {
   RecordView,
-  RecordOverlay,
+  RecordOverlayHost,
   RecordHeader,
   RecordKeyFacts,
   RecordSection,
@@ -49,7 +49,9 @@ function makeGetZimmerDisplayName(zimmerList: Zimmer[]) {
 
 // ─────────────────────────────────────────────────────────────────────────
 // SURFACE 1 — Overlay stack inside the dashboard (relations push, never
-// navigate). One <RecordOverlay> shell; the stack item discriminates by type.
+// navigate). ONE <RecordOverlayHost> shell for the WHOLE stack; the item
+// discriminates by type. Per-type <RecordOverlay open={…}> shells would
+// unmount/remount on every drill and replay the entrance animation (blink).
 // Use this when the user must keep the dashboard context.
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -97,14 +99,12 @@ export function HotelOverlayExample() {
         ))}
       </div>
 
-      <RecordOverlay
-        open={overlay.open}
-        onClose={overlay.close}
-        onBack={overlay.canGoBack ? overlay.pop : undefined}
+      <RecordOverlayHost
+        overlay={overlay}
         placement="side"
         size="md"
-        ariaLabel="Buchung"
-      >
+        render={() => (
+          <>
         {currentBuchung && (
           <>
             <RecordHeader
@@ -152,7 +152,9 @@ export function HotelOverlayExample() {
             <RecordAttachments appId={APP_IDS.ZIMMER} recordId={currentZimmer.record_id} />
           </>
         )}
-      </RecordOverlay>
+          </>
+        )}
+      />
     </>
   );
 }

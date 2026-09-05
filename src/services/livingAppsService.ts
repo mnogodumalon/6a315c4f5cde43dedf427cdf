@@ -1,9 +1,12 @@
 // AUTOMATICALLY GENERATED SERVICE
 import { APP_IDS, LOOKUP_OPTIONS, FIELD_TYPES } from '@/types/app';
-import type { Veranstalter, Veranstaltungen, Anmeldungen, CreateVeranstalter, CreateVeranstaltungen, CreateAnmeldungen } from '@/types/app';
+import { ensureUploadableImage } from '@/lib/ai';
+import { REST_URL } from '@/lib/origin';
+import type { Veranstaltungen, Veranstalter, Anmeldungen, CreateVeranstaltungen, CreateVeranstalter, CreateAnmeldungen } from '@/types/app';
 
-// Base Configuration
-const API_BASE_URL = 'https://my.living-apps.de/rest';
+// Base Configuration — the host is a RUNTIME fact (lib/origin.ts):
+// a bundle copied to another LA instance must talk to THAT instance.
+const API_BASE_URL = REST_URL;
 
 // --- HELPER FUNCTIONS ---
 export function extractRecordId(url: unknown): string | null {
@@ -29,7 +32,7 @@ export function extractRecordIds(urls: unknown): string[] {
 }
 
 export function createRecordUrl(appId: string, recordId: string): string {
-  return `https://my.living-apps.de/rest/apps/${appId}/records/${recordId}`;
+  return `${API_BASE_URL}/apps/${appId}/records/${recordId}`;
 }
 
 export class LivingAppsApiError extends Error {
@@ -74,6 +77,18 @@ export interface CallApiOptions {
   silent?: boolean;
 }
 
+/** What the create and update helpers resolve to. Same `record_id`
+ *  the read helpers expose, so the whole family behaves alike — the
+ *  raw REST answer only
+ *  carries `id`, and code that guessed (e.g. Object.keys(res)[0]) built
+ *  `/records/id` and got a 400 on the next write. */
+export interface MutationResult {
+  record_id: string;
+  id: string;
+  fields: Record<string, any>;
+  [key: string]: any;
+}
+
 async function callApi(method: string, endpoint: string, data?: any, options?: CallApiOptions) {
   const silent = options?.silent === true;
   let response: Response;
@@ -94,10 +109,12 @@ async function callApi(method: string, endpoint: string, data?: any, options?: C
     throw netErr;
   }
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) window.dispatchEvent(new Event('auth-error'));
+    // 401/403 go to the login screen only — never to the errorbus (repair can't fix auth).
+    const isAuthError = response.status === 401 || response.status === 403;
+    if (isAuthError) window.dispatchEvent(new Event('auth-error'));
     const { message, raw } = await parseErrorBody(response);
     const err = new LivingAppsApiError(message, response.status, raw);
-    if (!silent) {
+    if (!silent && !isAuthError) {
       window.dispatchEvent(new CustomEvent('errorbus:emit', { detail: {
         source: 'api',
         status: err.status,
@@ -118,6 +135,10 @@ async function callApi(method: string, endpoint: string, data?: any, options?: C
 
 /** Upload a file to LivingApps. Returns the file URL for use in record fields. */
 export async function uploadFile(file: File | Blob, filename?: string): Promise<string> {
+  // HEIC/HEIF (iPhone photos) crash the server-side image decoder (500).
+  // Convert to JPEG in the browser BEFORE upload — every upload path routes
+  // through here, so this one guard covers form fields AND attachments.
+  if (file instanceof File) file = await ensureUploadableImage(file);
   const formData = new FormData();
   formData.append('file', file, filename ?? (file instanceof File ? file.name : 'upload'));
   const res = await fetch(`${API_BASE_URL}/files`, {
@@ -178,6 +199,69 @@ function enrichLookupFields<T extends { fields: Record<string, unknown> }>(
     }
     return { ...r, fields } as T;
   });
+}
+
+/** A textarea that HOLDS A LIST but was typed on one line.
+ *
+ *  Rendering such a field as tiles/bullets is the natural thing to do, and
+ *  the natural way to write it is `value.split('\n')` — one item per line
+ *  is the convention every form implies. Owners type differently though:
+ *  a live landing page collapsed five services into ONE tile because the
+ *  record held 'Tagesbetreuung, Übernachtung, …' without a single line
+ *  break. Normalizing HERE makes that natural split correct whatever was
+ *  typed, instead of asking every page to re-derive the heuristic.
+ *
+ *  Deliberately conservative — prose must survive untouched:
+ *    · already has line breaks  → left alone (the author's own structure)
+ *    · ; • · |                  → unambiguous separators, 2 parts suffice
+ *    · commas                   → only with 3+ parts that all read like
+ *                                 labels: short, at most four words, no
+ *                                 sentence punctuation. A prose clause like
+ *                                 "Katzen und Kleintiere aller Rassen" is
+ *                                 short enough but not wordy-short.
+ *  Anything else stays as it is, so a wrong guess degrades to today's
+ *  behaviour (one item), never to mangled prose. */
+const LIST_LABEL_MAX = 40;
+const LIST_LABEL_MAX_WORDS = 4;
+function listTextToLines(text: string): string {
+  if (!text || /\r?\n/.test(text)) return text;
+  const bulleted = text.split(/\s*[;•·|]\s*/).map(s => s.trim()).filter(Boolean);
+  if (bulleted.length >= 2) return bulleted.join('\n');
+  const parts = text.split(/\s*,\s*/).map(s => s.trim()).filter(Boolean);
+  const looksLikeLabels = parts.length >= 3 && parts.every(p =>
+    p.length <= LIST_LABEL_MAX
+    && p.split(/\s+/).length <= LIST_LABEL_MAX_WORDS
+    && !/[.!?:]$/.test(p));
+  return looksLikeLabels ? parts.join('\n') : text;
+}
+
+function normalizeListTextareas<T extends { fields: Record<string, unknown> }>(
+  records: T[], entityKey: string
+): T[] {
+  const types = FIELD_TYPES[entityKey];
+  if (!types) return records;
+  const areas = Object.keys(types).filter(k => types[k] === 'string/textarea');
+  if (areas.length === 0) return records;
+  return records.map(r => {
+    let touched = false;
+    const fields = { ...r.fields };
+    for (const key of areas) {
+      const val = fields[key];
+      if (typeof val !== 'string') continue;
+      const next = listTextToLines(val);
+      if (next !== val) { fields[key] = next; touched = true; }
+    }
+    return touched ? ({ ...r, fields } as T) : r;
+  });
+}
+
+/** The one post-processing step every READ goes through: lookup objects
+ *  attached, list-ish textareas line-broken. Read helpers call this, not
+ *  the individual passes. */
+function hydrateRecords<T extends { fields: Record<string, unknown> }>(
+  records: T[], entityKey: string
+): T[] {
+  return normalizeListTextareas(enrichLookupFields(records, entityKey), entityKey);
 }
 
 /** Normalize fields for API writes: strip lookup objects to keys, fix date formats. */
@@ -308,70 +392,79 @@ export async function getAppGroups(): Promise<AppGroupInfo[]> {
 }
 
 export class LivingAppsService {
-  // --- VERANSTALTER ---
-  static async getVeranstalter(): Promise<Veranstalter[]> {
-    const data = await callApi('GET', `/apps/${APP_IDS.VERANSTALTER}/records`);
-    const records = Object.entries(data).map(([id, rec]: [string, any]) => ({
-      record_id: id, ...rec
-    })) as Veranstalter[];
-    return enrichLookupFields(records, 'veranstalter');
-  }
-  static async getVeranstalterEntry(id: string): Promise<Veranstalter | undefined> {
-    const data = await callApi('GET', `/apps/${APP_IDS.VERANSTALTER}/records/${id}`);
-    const record = { record_id: data.id, ...data } as Veranstalter;
-    return enrichLookupFields([record], 'veranstalter')[0];
-  }
-  static async createVeranstalterEntry(fields: CreateVeranstalter) {
-    return callApi('POST', `/apps/${APP_IDS.VERANSTALTER}/records`, { fields: cleanFieldsForApi(fields as any, 'veranstalter') });
-  }
-  static async updateVeranstalterEntry(id: string, fields: Partial<CreateVeranstalter>) {
-    return callApi('PATCH', `/apps/${APP_IDS.VERANSTALTER}/records/${id}`, { fields: cleanFieldsForApi(fields as any, 'veranstalter') });
-  }
-  static async deleteVeranstalterEntry(id: string) {
-    return callApi('DELETE', `/apps/${APP_IDS.VERANSTALTER}/records/${id}`);
-  }
-
   // --- VERANSTALTUNGEN ---
   static async getVeranstaltungen(): Promise<Veranstaltungen[]> {
     const data = await callApi('GET', `/apps/${APP_IDS.VERANSTALTUNGEN}/records`);
     const records = Object.entries(data).map(([id, rec]: [string, any]) => ({
-      record_id: id, ...rec
+      record_id: id, ...rec,
+      createdat: rec.created_at ?? '', updatedat: rec.updated_at ?? null,
     })) as Veranstaltungen[];
-    return enrichLookupFields(records, 'veranstaltungen');
+    return hydrateRecords(records, 'veranstaltungen');
   }
   static async getVeranstaltungenEntry(id: string): Promise<Veranstaltungen | undefined> {
     const data = await callApi('GET', `/apps/${APP_IDS.VERANSTALTUNGEN}/records/${id}`);
-    const record = { record_id: data.id, ...data } as Veranstaltungen;
-    return enrichLookupFields([record], 'veranstaltungen')[0];
+    const record = { record_id: data.id, ...data, createdat: data.created_at ?? '', updatedat: data.updated_at ?? null } as Veranstaltungen;
+    return hydrateRecords([record], 'veranstaltungen')[0];
   }
-  static async createVeranstaltungenEntry(fields: CreateVeranstaltungen) {
-    return callApi('POST', `/apps/${APP_IDS.VERANSTALTUNGEN}/records`, { fields: cleanFieldsForApi(fields as any, 'veranstaltungen') });
+  static async createVeranstaltungenEntry(fields: CreateVeranstaltungen): Promise<MutationResult> {
+    const data = await callApi('POST', `/apps/${APP_IDS.VERANSTALTUNGEN}/records`, { fields: cleanFieldsForApi(fields as any, 'veranstaltungen') });
+    return { ...data, record_id: data.id };
   }
-  static async updateVeranstaltungenEntry(id: string, fields: Partial<CreateVeranstaltungen>) {
-    return callApi('PATCH', `/apps/${APP_IDS.VERANSTALTUNGEN}/records/${id}`, { fields: cleanFieldsForApi(fields as any, 'veranstaltungen') });
+  static async updateVeranstaltungenEntry(id: string, fields: Partial<CreateVeranstaltungen>): Promise<MutationResult> {
+    const data = await callApi('PATCH', `/apps/${APP_IDS.VERANSTALTUNGEN}/records/${id}`, { fields: cleanFieldsForApi(fields as any, 'veranstaltungen') });
+    return { ...data, record_id: data.id };
   }
   static async deleteVeranstaltungenEntry(id: string) {
     return callApi('DELETE', `/apps/${APP_IDS.VERANSTALTUNGEN}/records/${id}`);
+  }
+
+  // --- VERANSTALTER ---
+  static async getVeranstalter(): Promise<Veranstalter[]> {
+    const data = await callApi('GET', `/apps/${APP_IDS.VERANSTALTER}/records`);
+    const records = Object.entries(data).map(([id, rec]: [string, any]) => ({
+      record_id: id, ...rec,
+      createdat: rec.created_at ?? '', updatedat: rec.updated_at ?? null,
+    })) as Veranstalter[];
+    return hydrateRecords(records, 'veranstalter');
+  }
+  static async getVeranstalterEntry(id: string): Promise<Veranstalter | undefined> {
+    const data = await callApi('GET', `/apps/${APP_IDS.VERANSTALTER}/records/${id}`);
+    const record = { record_id: data.id, ...data, createdat: data.created_at ?? '', updatedat: data.updated_at ?? null } as Veranstalter;
+    return hydrateRecords([record], 'veranstalter')[0];
+  }
+  static async createVeranstalterEntry(fields: CreateVeranstalter): Promise<MutationResult> {
+    const data = await callApi('POST', `/apps/${APP_IDS.VERANSTALTER}/records`, { fields: cleanFieldsForApi(fields as any, 'veranstalter') });
+    return { ...data, record_id: data.id };
+  }
+  static async updateVeranstalterEntry(id: string, fields: Partial<CreateVeranstalter>): Promise<MutationResult> {
+    const data = await callApi('PATCH', `/apps/${APP_IDS.VERANSTALTER}/records/${id}`, { fields: cleanFieldsForApi(fields as any, 'veranstalter') });
+    return { ...data, record_id: data.id };
+  }
+  static async deleteVeranstalterEntry(id: string) {
+    return callApi('DELETE', `/apps/${APP_IDS.VERANSTALTER}/records/${id}`);
   }
 
   // --- ANMELDUNGEN ---
   static async getAnmeldungen(): Promise<Anmeldungen[]> {
     const data = await callApi('GET', `/apps/${APP_IDS.ANMELDUNGEN}/records`);
     const records = Object.entries(data).map(([id, rec]: [string, any]) => ({
-      record_id: id, ...rec
+      record_id: id, ...rec,
+      createdat: rec.created_at ?? '', updatedat: rec.updated_at ?? null,
     })) as Anmeldungen[];
-    return enrichLookupFields(records, 'anmeldungen');
+    return hydrateRecords(records, 'anmeldungen');
   }
   static async getAnmeldungenEntry(id: string): Promise<Anmeldungen | undefined> {
     const data = await callApi('GET', `/apps/${APP_IDS.ANMELDUNGEN}/records/${id}`);
-    const record = { record_id: data.id, ...data } as Anmeldungen;
-    return enrichLookupFields([record], 'anmeldungen')[0];
+    const record = { record_id: data.id, ...data, createdat: data.created_at ?? '', updatedat: data.updated_at ?? null } as Anmeldungen;
+    return hydrateRecords([record], 'anmeldungen')[0];
   }
-  static async createAnmeldungenEntry(fields: CreateAnmeldungen) {
-    return callApi('POST', `/apps/${APP_IDS.ANMELDUNGEN}/records`, { fields: cleanFieldsForApi(fields as any, 'anmeldungen') });
+  static async createAnmeldungenEntry(fields: CreateAnmeldungen): Promise<MutationResult> {
+    const data = await callApi('POST', `/apps/${APP_IDS.ANMELDUNGEN}/records`, { fields: cleanFieldsForApi(fields as any, 'anmeldungen') });
+    return { ...data, record_id: data.id };
   }
-  static async updateAnmeldungenEntry(id: string, fields: Partial<CreateAnmeldungen>) {
-    return callApi('PATCH', `/apps/${APP_IDS.ANMELDUNGEN}/records/${id}`, { fields: cleanFieldsForApi(fields as any, 'anmeldungen') });
+  static async updateAnmeldungenEntry(id: string, fields: Partial<CreateAnmeldungen>): Promise<MutationResult> {
+    const data = await callApi('PATCH', `/apps/${APP_IDS.ANMELDUNGEN}/records/${id}`, { fields: cleanFieldsForApi(fields as any, 'anmeldungen') });
+    return { ...data, record_id: data.id };
   }
   static async deleteAnmeldungenEntry(id: string) {
     return callApi('DELETE', `/apps/${APP_IDS.ANMELDUNGEN}/records/${id}`);

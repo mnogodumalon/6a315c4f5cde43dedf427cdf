@@ -1,3 +1,18 @@
+/**
+ * VeranstaltungenDialog — pre-generated create/edit dialog for Veranstaltungen.
+ *
+ * Props: open, onClose, onSubmit(fields) => Promise<void>, defaultValues?,
+ * recordId? (pass when EDITING — enables the attachments section),
+ * veranstalterList (full hook array — resolves the Veranstalter applookup),
+ * enablePhotoScan?, enablePhotoLocation?.
+ *
+ * defaultValues is SHAPE-TOLERANT and its prop type is the EXPORTED
+ * VeranstaltungenDialogDefaults — NOT the entity field type: lookup fields accept
+ * the bare KEY string (or LookupValue), applookup fields the bare record id
+ * (or record URL); the dialog normalizes. Type prefill STATE with the export:
+ *  ❌ useState<Partial<Veranstaltungen['fields']>>({ … })   // LookupValue fields reject string prefills (TS2322)
+ *  ✓ useState<VeranstaltungenDialogDefaults | undefined>(undefined)
+ */
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Veranstaltungen, Veranstalter, LookupValue } from '@/types/app';
 import { APP_IDS, LOOKUP_OPTIONS } from '@/types/app';
@@ -13,6 +28,7 @@ import type { ComputedContext } from '@/config/form-enhancements/types';
 import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
 import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/Veranstaltungen';
 import { AttachmentsSection } from '@/components/AttachmentsSection';
+import { t, appLabel, fieldLabel, lookupLabel, localeTag, CURRENCY } from '@/i18n';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem,
@@ -23,9 +39,15 @@ import { VeranstalterDialog } from '@/components/dialogs/VeranstalterDialog';
 import { DatePicker } from '@/components/DatePicker';
 import { Checkbox } from '@/components/ui/checkbox';
 import { IconAlertCircle, IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconCrosshair, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
-import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode, dataUriToBlob } from '@/lib/ai';
+import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode, dataUriToBlob, reverseGeocodeDetailed, geocodeAddress } from '@/lib/ai';
 import { GeoMapPicker } from '@/components/GeoMapPicker';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { lookupKey } from '@/lib/formatters';
+
+/** Widened prefill type for VeranstaltungenDialog.defaultValues — see file header. */
+export type VeranstaltungenDialogDefaults = Omit<Veranstaltungen['fields'], 'kategorie'> & {
+    kategorie?: LookupValue | string;
+  };
 
 interface VeranstaltungenDialogProps {
   open: boolean;
@@ -34,9 +56,7 @@ interface VeranstaltungenDialogProps {
   /** SHAPE-TOLERANT: lookup fields accept the bare key (string) or the
    *  LookupValue object; applookup fields the bare record id or the full
    *  record URL — the dialog normalizes both. */
-  defaultValues?: Omit<Veranstaltungen['fields'], 'kategorie'> & {
-    kategorie?: LookupValue | string;
-  };
+  defaultValues?: VeranstaltungenDialogDefaults;
   /** Record id when editing — enables the attachments section. Omit on create. */
   recordId?: string;
   veranstalterList: Veranstalter[];
@@ -103,6 +123,12 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
     setCreateVeranstalterInitial(q);
     setCreateVeranstalterOpen(true);
   }
+  const [showErrors, setShowErrors] = useState(false);
+  const REQUIRED_FIELDS = ['veranstalter', 'titel', 'beschreibung_veranstaltung', 'kategorie', 'beginn', 'veranstaltungsort_strasse', 'veranstaltungsort_hausnummer', 'veranstaltungsort_plz', 'veranstaltungsort_ort'] as const;
+  const missingRequired = REQUIRED_FIELDS.filter(k => {
+    const v = (fields as Record<string, unknown>)[k];
+    return v == null || v === '' || (Array.isArray(v) && v.length === 0);
+  });
   const [aiOpen, setAiOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
@@ -186,6 +212,10 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (missingRequired.length > 0) {
+      setShowErrors(true);
+      return;
+    }
     setSaving(true);
     setSubmitError(null);
     try {
@@ -207,7 +237,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
       await onSubmit(clean as Veranstaltungen['fields']);
       onClose();
     } catch (err) {
-      setSubmitError(err instanceof Error && err.message ? err.message : 'Speichern fehlgeschlagen.');
+      setSubmitError(err instanceof Error && err.message ? err.message : t('submit_error'));
     } finally {
       setSaving(false);
     }
@@ -217,28 +247,86 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
   const [showCoords, setShowCoords] = useState(false);
   const [geoFromPhoto, setGeoFromPhoto] = useState(false);
   const geoDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // This entity has a real ADDRESS BLOCK (≥2 components), so a geo pick also
+  // fills the separate address fields. The generator resolved which field is
+  // which: {"road": "veranstaltungsort_strasse", "houseNumber": "veranstaltungsort_hausnummer", "postcode": "veranstaltungsort_plz", "city": "veranstaltungsort_ort"}. The marker is the source of truth, so a
+  // move OVERWRITES these fields (info always; components when Nominatim returns them).
+  const ADDRESS_FIELD_MAP: Record<string, string | undefined> = {"road": "veranstaltungsort_strasse", "houseNumber": "veranstaltungsort_hausnummer", "postcode": "veranstaltungsort_plz", "city": "veranstaltungsort_ort"};
+  async function applyGeoAddress(fieldKey: string, lat: number, lng: number) {
+    const addr = await reverseGeocodeDetailed(lat, lng);
+    setFields(f => {
+      const next: any = { ...f, [fieldKey]: { ...((f as any)[fieldKey] ?? {}), lat, long: lng, info: addr.display } };
+      if (ADDRESS_FIELD_MAP.road && addr.road) next[ADDRESS_FIELD_MAP.road] = addr.road;
+      if (ADDRESS_FIELD_MAP.houseNumber && addr.houseNumber) next[ADDRESS_FIELD_MAP.houseNumber] = addr.houseNumber;
+      if (ADDRESS_FIELD_MAP.postcode && addr.postcode) next[ADDRESS_FIELD_MAP.postcode] = addr.postcode;
+      if (ADDRESS_FIELD_MAP.city && addr.city) next[ADDRESS_FIELD_MAP.city] = addr.city;
+      return next;
+    });
+  }
+
+  // FORWARD direction (mirror of applyGeoAddress): typing the address fields
+  // moves the geo point. The address-component inputs call onAddressFieldChange
+  // (instead of plain setFields), which writes the field AND debounce-geocodes
+  // the assembled address via Photon. The map below shows the result, draggable.
+  const FORWARD_GEO_KEY = 'veranstaltungsort_geo';
+  const fwdGeoDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const fwdGeoAbortRef = useRef<AbortController | null>(null);
+  // The point a forward geocode just wrote — so the picker's programmatic
+  // recenter (its moveend → handleMapMove) is recognised as an ECHO and does NOT
+  // reverse-geocode back over the address the user is typing. A real drag differs.
+  const suppressReverseEchoRef = useRef<{ lat: number; long: number } | null>(null);
+  function buildAddrQuery(f: any): string {
+    const v = (c?: string) => (c ? String((f as any)[c] ?? '').trim() : '');
+    const road = v(ADDRESS_FIELD_MAP.road);
+    const house = v(ADDRESS_FIELD_MAP.houseNumber);
+    const postcode = v(ADDRESS_FIELD_MAP.postcode);
+    const city = v(ADDRESS_FIELD_MAP.city);
+    // Need ≥2 of the STRONG components (road/postcode/city) — a lone token would
+    // resolve to the wrong place. A house number alone never qualifies.
+    if ([road, postcode, city].filter(Boolean).length < 2) return '';
+    const street = [road, house].filter(Boolean).join(' ');
+    return [street, postcode, city].filter(Boolean).join(', ');
+  }
+  function scheduleForwardGeocode(q: string) {
+    clearTimeout(fwdGeoDebounceRef.current);
+    if (!q) return;
+    fwdGeoDebounceRef.current = setTimeout(async () => {
+      fwdGeoAbortRef.current?.abort();
+      const ac = new AbortController();
+      fwdGeoAbortRef.current = ac;
+      const hit = await geocodeAddress(q, ac.signal);
+      if (!hit) return;
+      suppressReverseEchoRef.current = { lat: hit.lat, long: hit.long };
+      setFields(f => ({ ...f, [FORWARD_GEO_KEY]: { ...((f as any)[FORWARD_GEO_KEY] ?? {}), lat: hit.lat, long: hit.long, info: hit.label } }));
+    }, 600);
+  }
+  function onAddressFieldChange(key: string, value: string) {
+    setFields(f => ({ ...f, [key]: value }));
+    scheduleForwardGeocode(buildAddrQuery({ ...fields, [key]: value }));
+  }
   async function geoLocate(fieldKey: string) {
     if (!navigator.geolocation) return;
     setLocating(true);
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
-      let info = '';
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-        const data = await res.json();
-        info = data.display_name ?? '';
-      } catch {}
-      setFields(f => ({ ...f, [fieldKey]: { lat: latitude, long: longitude, info } as any }));
+      await applyGeoAddress(fieldKey, latitude, longitude);
       setGeoFromPhoto(false);
       setLocating(false);
     }, () => { setLocating(false); });
   }
   function handleMapMove(fieldKey: string, lat: number, lng: number) {
     setFields(f => ({ ...f, [fieldKey]: { ...((f as any)[fieldKey] ?? {}), lat, long: lng } }));
+    // Skip the reverse round-trip when this move is the ECHO of a forward geocode
+    // (the picker recentred itself) — otherwise it would overwrite the address the
+    // user just typed. A genuine user DRAG lands away from the echoed point.
+    const echo = suppressReverseEchoRef.current;
+    if (echo && Math.abs(echo.lat - lat) < 2e-4 && Math.abs(echo.long - lng) < 2e-4) {
+      suppressReverseEchoRef.current = null;
+      return;
+    }
     clearTimeout(geoDebounceRef.current);
     geoDebounceRef.current = setTimeout(async () => {
-      const info = await reverseGeocode(lat, lng);
-      setFields(f => ({ ...f, [fieldKey]: { ...((f as any)[fieldKey] ?? {}), info } }));
+      await applyGeoAddress(fieldKey, lat, lng);
     }, 600);
   }
 
@@ -322,7 +410,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
       setScanSuccess(true);
       setTimeout(() => setScanSuccess(false), 3000);
     } catch (err) {
-      console.error('Scan fehlgeschlagen:', err);
+      console.error(`${t('scan_error')}:`, err);
       alert(err instanceof Error ? err.message : String(err));
     } finally {
       setScanning(false);
@@ -357,12 +445,14 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
     }
   }, []);
 
-  const DIALOG_INTENT = defaultValues ? 'Veranstaltungen bearbeiten' : 'Veranstaltungen hinzufügen';
+  const DIALOG_INTENT = defaultValues
+    ? t('edit_entity', { entity: appLabel('veranstaltungen') })
+    : t('new_entity', { entity: appLabel('veranstaltungen') });
 
   const fieldBlocks: Record<string, React.ReactNode> = {
     'veranstalter': (
       <div key="veranstalter" className="space-y-1.5">
-        <Label htmlFor="veranstalter">Veranstalter (E-Mail-Adresse)</Label>
+        <Label htmlFor="veranstalter">{fieldLabel('veranstaltungen', 'veranstalter')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Combobox
           id="veranstalter"
           placeholder=""
@@ -372,27 +462,32 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
           }))}
           value={extractRecordId(fields.veranstalter)}
           onChange={id => setFields(f => ({ ...f, veranstalter: id ? createRecordUrl(APP_IDS.VERANSTALTER, id) : undefined }))}
-          searchPlaceholder="Suchen…"
-          emptyText="Kein Treffer"
           onCreateNew={(q) => openCreateVeranstalter("veranstalter", q)}
-          createLabel="Neu in Veranstalter"
+          createLabel={t('create_in', { entity: appLabel('veranstalter') })}
         />
+        {showErrors && !fields.veranstalter && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'titel': (
       <div key="titel" className="space-y-1.5">
-        <Label htmlFor="titel">Titel der Veranstaltung</Label>
+        <Label htmlFor="titel">{fieldLabel('veranstaltungen', 'titel')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="titel"
           placeholder=""
           value={fields.titel ?? ''}
           onChange={e => setFields(f => ({ ...f, titel: e.target.value }))}
+          required
         />
+        {showErrors && !fields.titel && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'beschreibung_veranstaltung': (
       <div key="beschreibung_veranstaltung" className="space-y-1.5">
-        <Label htmlFor="beschreibung_veranstaltung">Beschreibung</Label>
+        <Label htmlFor="beschreibung_veranstaltung">{fieldLabel('veranstaltungen', 'beschreibung_veranstaltung')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Textarea
           id="beschreibung_veranstaltung"
           placeholder=""
@@ -400,43 +495,53 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
           onChange={e => setFields(f => ({ ...f, beschreibung_veranstaltung: e.target.value }))}
           rows={3}
         />
+        {showErrors && !fields.beschreibung_veranstaltung && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'kategorie': (
       <div key="kategorie" className="space-y-1.5">
-        <Label htmlFor="kategorie">Kategorie</Label>
+        <Label htmlFor="kategorie">{fieldLabel('veranstaltungen', 'kategorie')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Select
           value={lookupKey(fields.kategorie) ?? ''}
           onValueChange={v => setFields(f => ({ ...f, kategorie: v === 'none' ? undefined : v as any }))}
         >
-          <SelectTrigger id="kategorie"><SelectValue placeholder="" /></SelectTrigger>
+          <SelectTrigger id="kategorie" className="max-sm:h-11"><SelectValue placeholder="" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="none">—</SelectItem>
-            <SelectItem value="gesundheit">Gesundheit & Prävention</SelectItem>
-            <SelectItem value="sport">Sport & Bewegung</SelectItem>
-            <SelectItem value="ernaehrung">Ernährung</SelectItem>
-            <SelectItem value="entspannung">Entspannung & Achtsamkeit</SelectItem>
-            <SelectItem value="beratung">Beratung & Information</SelectItem>
-            <SelectItem value="sonstiges">Sonstiges</SelectItem>
+            <SelectItem value="gesundheit">{lookupLabel('veranstaltungen', 'kategorie', 'gesundheit') ?? 'Gesundheit & Prävention'}</SelectItem>
+            <SelectItem value="sport">{lookupLabel('veranstaltungen', 'kategorie', 'sport') ?? 'Sport & Bewegung'}</SelectItem>
+            <SelectItem value="ernaehrung">{lookupLabel('veranstaltungen', 'kategorie', 'ernaehrung') ?? 'Ernährung'}</SelectItem>
+            <SelectItem value="entspannung">{lookupLabel('veranstaltungen', 'kategorie', 'entspannung') ?? 'Entspannung & Achtsamkeit'}</SelectItem>
+            <SelectItem value="beratung">{lookupLabel('veranstaltungen', 'kategorie', 'beratung') ?? 'Beratung & Information'}</SelectItem>
+            <SelectItem value="sonstiges">{lookupLabel('veranstaltungen', 'kategorie', 'sonstiges') ?? 'Sonstiges'}</SelectItem>
           </SelectContent>
         </Select>
+        {showErrors && !fields.kategorie && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'beginn': (
       <div key="beginn" className="space-y-1.5">
-        <Label htmlFor="beginn">Beginn (Datum & Uhrzeit)</Label>
+        <Label htmlFor="beginn">{fieldLabel('veranstaltungen', 'beginn')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <DatePicker
           id="beginn"
           placeholder=""
           mode="datetime"
           value={fields.beginn ?? null}
           onChange={v => setFields(f => ({ ...f, beginn: v ?? undefined }))}
+          required
         />
+        {showErrors && !fields.beginn && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'ende': (
       <div key="ende" className="space-y-1.5">
-        <Label htmlFor="ende">Ende (Datum & Uhrzeit)</Label>
+        <Label htmlFor="ende">{fieldLabel('veranstaltungen', 'ende')}</Label>
         <DatePicker
           id="ende"
           placeholder=""
@@ -448,7 +553,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
     ),
     'anmeldefrist': (
       <div key="anmeldefrist" className="space-y-1.5">
-        <Label htmlFor="anmeldefrist">Anmeldefrist</Label>
+        <Label htmlFor="anmeldefrist">{fieldLabel('veranstaltungen', 'anmeldefrist')}</Label>
         <DatePicker
           id="anmeldefrist"
           placeholder=""
@@ -460,7 +565,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
     ),
     'veranstaltungsort_name': (
       <div key="veranstaltungsort_name" className="space-y-1.5">
-        <Label htmlFor="veranstaltungsort_name">Name des Veranstaltungsorts</Label>
+        <Label htmlFor="veranstaltungsort_name">{fieldLabel('veranstaltungen', 'veranstaltungsort_name')}</Label>
         <Input
           id="veranstaltungsort_name"
           placeholder=""
@@ -471,58 +576,78 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
     ),
     'veranstaltungsort_strasse': (
       <div key="veranstaltungsort_strasse" className="space-y-1.5">
-        <Label htmlFor="veranstaltungsort_strasse">Straße</Label>
+        <Label htmlFor="veranstaltungsort_strasse">{fieldLabel('veranstaltungen', 'veranstaltungsort_strasse')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="veranstaltungsort_strasse"
           placeholder=""
           value={fields.veranstaltungsort_strasse ?? ''}
-          onChange={e => setFields(f => ({ ...f, veranstaltungsort_strasse: e.target.value }))}
+          onChange={e => onAddressFieldChange("veranstaltungsort_strasse", e.target.value)}
+          required
         />
+        {showErrors && !fields.veranstaltungsort_strasse && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'veranstaltungsort_hausnummer': (
       <div key="veranstaltungsort_hausnummer" className="space-y-1.5">
-        <Label htmlFor="veranstaltungsort_hausnummer">Hausnummer</Label>
+        <Label htmlFor="veranstaltungsort_hausnummer">{fieldLabel('veranstaltungen', 'veranstaltungsort_hausnummer')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="veranstaltungsort_hausnummer"
           placeholder=""
           value={fields.veranstaltungsort_hausnummer ?? ''}
-          onChange={e => setFields(f => ({ ...f, veranstaltungsort_hausnummer: e.target.value }))}
+          onChange={e => onAddressFieldChange("veranstaltungsort_hausnummer", e.target.value)}
+          required
         />
+        {showErrors && !fields.veranstaltungsort_hausnummer && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'veranstaltungsort_plz': (
       <div key="veranstaltungsort_plz" className="space-y-1.5">
-        <Label htmlFor="veranstaltungsort_plz">Postleitzahl</Label>
+        <Label htmlFor="veranstaltungsort_plz">{fieldLabel('veranstaltungen', 'veranstaltungsort_plz')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="veranstaltungsort_plz"
           placeholder=""
           value={fields.veranstaltungsort_plz ?? ''}
-          onChange={e => setFields(f => ({ ...f, veranstaltungsort_plz: e.target.value }))}
+          onChange={e => onAddressFieldChange("veranstaltungsort_plz", e.target.value)}
+          required
         />
+        {showErrors && !fields.veranstaltungsort_plz && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'veranstaltungsort_ort': (
       <div key="veranstaltungsort_ort" className="space-y-1.5">
-        <Label htmlFor="veranstaltungsort_ort">Ort</Label>
+        <Label htmlFor="veranstaltungsort_ort">{fieldLabel('veranstaltungen', 'veranstaltungsort_ort')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="veranstaltungsort_ort"
           placeholder=""
           value={fields.veranstaltungsort_ort ?? ''}
-          onChange={e => setFields(f => ({ ...f, veranstaltungsort_ort: e.target.value }))}
+          onChange={e => onAddressFieldChange("veranstaltungsort_ort", e.target.value)}
+          required
         />
+        {showErrors && !fields.veranstaltungsort_ort && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'veranstaltungsort_geo': (
       <div key="veranstaltungsort_geo" className="space-y-1.5">
-        <Label htmlFor="veranstaltungsort_geo">Standort auf der Karte</Label>
+        <Label htmlFor="veranstaltungsort_geo">{fieldLabel('veranstaltungen', 'veranstaltungsort_geo')}</Label>
         <div className="space-y-3">
-          <Button type="button" variant="outline" className="w-full" disabled={locating} onClick={() => geoLocate("veranstaltungsort_geo")}>
+          <Button type="button" variant="outline" className="w-full max-sm:h-11" disabled={locating} onClick={() => geoLocate("veranstaltungsort_geo")}>
             {locating ? <IconLoader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <IconCrosshair className="h-4 w-4 mr-1.5" />}
-            Aktuellen Standort verwenden
+            {t('fr_use_location')}
           </Button>
+          <AddressAutocomplete
+            placeholder={t('fr_search_address')}
+            onSelect={r => setFields(f => ({ ...f, veranstaltungsort_geo: { lat: r.lat, long: r.long, info: r.label } as any }))}
+          />
           {geoFromPhoto && fields.veranstaltungsort_geo && (
-            <p className="text-xs text-primary italic">Standort aus Foto übernommen</p>
+            <p className="text-xs text-primary italic">{t('fr_photo_location')}</p>
           )}
           {fields.veranstaltungsort_geo?.info && (
             <p className="text-sm text-muted-foreground break-words whitespace-normal">
@@ -536,14 +661,14 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
               onChange={(lat, lng) => handleMapMove("veranstaltungsort_geo", lat, lng)}
             />
           )}
-          <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors" onClick={() => setShowCoords(v => !v)}>
-            {showCoords ? 'Koordinaten verbergen' : 'Koordinaten anzeigen'}
+          <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 py-1 max-sm:py-2 transition-colors" onClick={() => setShowCoords(v => !v)}>
+            {showCoords ? t('fr_hide_coords') : t('fr_show_coords')}
             <IconChevronDown className={`h-3 w-3 transition-transform ${showCoords ? "rotate-180" : ""}`} />
           </button>
           {showCoords && (
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Breitengrad</Label>
+                <Label className="text-xs text-muted-foreground">{t('fr_lat')}</Label>
                 <Input type="number" step="any"
                   value={fields.veranstaltungsort_geo?.lat ?? ''}
                   onChange={e => {
@@ -553,7 +678,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
                 />
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Längengrad</Label>
+                <Label className="text-xs text-muted-foreground">{t('fr_long')}</Label>
                 <Input type="number" step="any"
                   value={fields.veranstaltungsort_geo?.long ?? ''}
                   onChange={e => {
@@ -569,7 +694,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
     ),
     'max_teilnehmer': (
       <div key="max_teilnehmer" className="space-y-1.5">
-        <Label htmlFor="max_teilnehmer">Maximale Teilnehmerzahl</Label>
+        <Label htmlFor="max_teilnehmer">{fieldLabel('veranstaltungen', 'max_teilnehmer')}</Label>
         <Input
           id="max_teilnehmer"
           type="number"
@@ -583,7 +708,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
     ),
     'kosten': (
       <div key="kosten" className="space-y-1.5">
-        <Label htmlFor="kosten">Kosten / Eintritt</Label>
+        <Label htmlFor="kosten">{fieldLabel('veranstaltungen', 'kosten')}</Label>
         <Input
           id="kosten"
           placeholder=""
@@ -594,7 +719,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
     ),
     'flyer': (
       <div key="flyer" className="space-y-1.5">
-        <Label htmlFor="flyer">Bild / Flyer</Label>
+        <Label htmlFor="flyer">{fieldLabel('veranstaltungen', 'flyer')}</Label>
         {fields.flyer ? (
           <div className="flex items-center gap-3 rounded-lg border p-2">
             <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
@@ -614,7 +739,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
                 <label
                   className="text-xs text-primary hover:underline cursor-pointer"
                 >
-                  Ändern
+                  {t('fr_change')}
                   <input
                     type="file"
                     accept="image/*,.pdf"
@@ -634,7 +759,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
                   className="text-xs text-muted-foreground hover:text-destructive"
                   onClick={() => setFields(f => ({ ...f, flyer: undefined }))}
                 >
-                  Entfernen
+                  {t('fr_remove')}
                 </button>
               </div>
             </div>
@@ -644,7 +769,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
             className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
           >
             <IconUpload size={20} className="text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Datei hochladen</span>
+            <span className="text-sm text-muted-foreground">{t('fr_upload_file')}</span>
             <input
               type="file"
               accept="image/*,.pdf"
@@ -731,15 +856,15 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
     // Backend-Feld mit €-Label ODER virtueller Computed-Key, dessen Name nach Geld aussieht.
     const looksLikeCurrency = CURRENCY_KEYS.has(k) || /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k);
     if (looksLikeCurrency) {
-      return n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return n.toLocaleString(localeTag(), { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+    return n.toLocaleString(localeTag(), { maximumFractionDigits: 2 });
   }
 
   return (
     <>
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0">
+      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0 max-sm:[&>button]:size-10 max-sm:[&>button]:grid max-sm:[&>button]:place-items-center max-sm:[&>button]:rounded-full max-sm:[&>button]:border max-sm:[&>button]:border-input max-sm:[&>button]:bg-background max-sm:[&>button]:opacity-100 max-sm:[&>button>svg]:size-5">
         <DialogHeader className="px-6 pt-5 pb-3 border-b flex flex-row items-center gap-3 space-y-0">
           <DialogTitle className="flex-1 truncate text-left">{DIALOG_INTENT}</DialogTitle>
           {enablePhotoScan && (
@@ -748,21 +873,21 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
               onClick={() => setAiOpen(o => !o)}
               aria-expanded={aiOpen}
               aria-controls="ai-fill-panel"
-              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all mr-7 shadow-sm ${
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 max-sm:py-2.5 max-sm:px-4 text-xs font-semibold transition-all mr-7 max-sm:mr-12 shadow-sm ${
                 aiOpen
                   ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
                   : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 hover:border-primary/50'
               }`}
             >
               <IconSparkles className={`h-3.5 w-3.5 ${aiOpen ? '' : 'text-primary'}`} />
-              <span className="hidden sm:inline">KI-Ausfüllen</span>
+              <span className="hidden sm:inline">{t('smart_fill')}</span>
               <IconChevronDown className={`h-3 w-3 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
             </button>
           )}
         </DialogHeader>
         {enablePhotoScan && aiOpen && (
           <div id="ai-fill-panel" className="border-b bg-muted/20 px-6 py-4 space-y-3">
-            <p className="text-xs text-muted-foreground">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
+            <p className="text-xs text-muted-foreground">{t('scan_header_sub')}</p>
             <div className="flex items-start gap-2 pl-0.5">
               <Checkbox
                 id="ai-use-personal-info"
@@ -772,21 +897,21 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
               />
               <span className="text-xs text-muted-foreground leading-snug">
                 <Label htmlFor="ai-use-personal-info" className="text-xs font-normal text-muted-foreground cursor-pointer inline">
-                  KI-Assistent darf zusätzlich Informationen zu meiner Person verwenden
+                  {t('useinfo_label')}
                 </Label>
                 {' '}
                 <button type="button" onClick={handleShowProfileInfo} className="text-xs text-primary hover:underline whitespace-nowrap">
-                  {profileLoading ? 'Lade...' : '(mehr Infos)'}
+                  {profileLoading ? t('useinfo_loading') : `(${t('useinfo_more')})`}
                 </button>
               </span>
             </div>
             {showProfileInfo && (
               <div className="rounded-md border bg-muted/50 p-2 text-xs max-h-40 overflow-y-auto">
-                <p className="font-medium mb-1">Folgende Infos über dich können von der KI genutzt werden:</p>
+                <p className="font-medium mb-1">{t('profile_preamble')}</p>
                 {profileData ? Object.values(profileData).map((v, i) => (
                   <span key={i}>{i > 0 && ", "}{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
                 )) : (
-                  <span className="text-muted-foreground">Profil konnte nicht geladen werden</span>
+                  <span className="text-muted-foreground">{t('useinfo_error')}</span>
                 )}
               </div>
             )}
@@ -817,8 +942,8 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
                     <IconLoader2 className="h-7 w-7 text-primary animate-spin" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium">KI analysiert...</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Felder werden automatisch ausgefüllt</p>
+                    <p className="text-sm font-medium">{t('scan_analyzing')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('scan_analyzing_sub')}</p>
                   </div>
                 </div>
               ) : scanSuccess ? (
@@ -827,8 +952,8 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
                     <IconCircleCheck className="h-7 w-7 text-green-600 dark:text-green-400" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">Felder ausgefüllt!</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Prüfe die Werte und passe sie ggf. an</p>
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">{t('scan_success')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('scan_success_sub')}</p>
                   </div>
                 </div>
               ) : (
@@ -837,7 +962,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
                     <IconPhotoPlus className="h-7 w-7 text-primary/70" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium">Foto oder Dokument hierher ziehen oder auswählen</p>
+                    <p className="text-sm font-medium">{t('scan_upload')}</p>
                   </div>
                 </div>
               )}
@@ -861,11 +986,11 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
             <div className="grid grid-cols-3 gap-2">
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => { e.stopPropagation(); cameraInputRef.current?.click(); }}>
-                <IconCamera className="h-3.5 w-3.5 mr-1" />Kamera
+                <IconCamera className="h-3.5 w-3.5 mr-1" />{t('scan_camera_btn')}
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}>
-                <IconUpload className="h-3.5 w-3.5 mr-1" />Foto wählen
+                <IconUpload className="h-3.5 w-3.5 mr-1" />{t('scan_file_btn')}
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => {
@@ -876,13 +1001,13 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
                     setTimeout(() => { if (fileInputRef.current) fileInputRef.current.accept = 'image/*,application/pdf'; }, 100);
                   }
                 }}>
-                <IconFileText className="h-3.5 w-3.5 mr-1" />Dokument
+                <IconFileText className="h-3.5 w-3.5 mr-1" />{t('scan_doc_btn')}
               </Button>
             </div>
 
             <div className="relative">
               <Textarea
-                placeholder="Text eingeben oder einfügen, z.B. Notizen, E-Mails, Beschreibungen..."
+                placeholder={t('scan_text_placeholder')}
                 value={aiText}
                 onChange={e => {
                   setAiText(e.target.value);
@@ -910,7 +1035,7 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
                     if (text) setAiText(prev => prev ? prev + '\n' + text : text);
                   } catch {}
                 }}
-                title="Paste"
+                title={t('paste')}
               >
                 <IconClipboard className="h-4 w-4" />
               </button>
@@ -924,13 +1049,13 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
                 disabled={scanning}
                 onClick={() => handleAiExtract()}
               >
-                <IconSparkles className="h-3.5 w-3.5 mr-1.5" />Analysieren
+                <IconSparkles className="h-3.5 w-3.5 mr-1.5" />{t('scan_text_analyze')}
               </Button>
             )}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0">
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0 max-sm:[&_input]:h-11">
           <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 min-w-0">
             {(() => {
               const renderField = (k: string) => {
@@ -1016,6 +1141,12 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
                 })()}
               </div>
             )}
+            {showErrors && missingRequired.length > 0 && (
+              <p className="text-xs text-destructive flex items-center gap-1.5" role="alert">
+                <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {t('missing_required')}
+              </p>
+            )}
             {recordId && (
               <div className="pt-2 border-t border-border">
                 <AttachmentsSection appId={APP_IDS.VERANSTALTUNGEN} recordId={recordId} />
@@ -1028,13 +1159,14 @@ export function VeranstaltungenDialog({ open, onClose, onSubmit, defaultValues, 
               <span className="min-w-0 break-words">{submitError}</span>
             </div>
           )}
-          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
+          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2 max-sm:flex-row">
+            <Button type="button" variant="outline" onClick={onClose} className="max-sm:h-12 max-sm:flex-1 max-sm:text-base">{t('cancel')}</Button>
             <Button
               type="submit"
-              disabled={saving || !isDirty}
+              className="max-sm:h-12 max-sm:flex-1 max-sm:text-base"
+              disabled={saving || !isDirty || (showErrors && missingRequired.length > 0)}
             >
-              {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
+              {saving ? t('saving') : defaultValues ? t('save') : t('create')}
             </Button>
           </DialogFooter>
         </form>

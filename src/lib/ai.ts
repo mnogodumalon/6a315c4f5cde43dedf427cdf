@@ -1,4 +1,6 @@
-const AI_ENDPOINT = "https://my.living-apps.de/litellm/v1/chat/completions";
+import { Sentry } from "./sentry";
+import { AI_ENDPOINT, HEIC_TO_URL } from "./origin";
+
 const AI_MODEL = "default";
 
 export type ChatMessage = {
@@ -94,13 +96,50 @@ function canvasConvertToJpeg(file: File): Promise<File> {
   });
 }
 
+/** Guards for the external HEIC converter. It runs libheif in a blob-URL Web
+ *  Worker; if a CSP or an ad/privacy blocker kills that worker, the underlying
+ *  promise can hang forever (no resolve, no reject) — leaving the user on an
+ *  infinite spinner. A timeout turns that hang into a reportable error. */
+const HEIC_SCRIPT_TIMEOUT_MS = 30000;
+const HEIC_DECODE_TIMEOUT_MS = 30000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+/** Report an image-conversion failure to Sentry with enough context to tell
+ *  browsers/formats apart later (captureException is a safe no-op when Sentry
+ *  has no DSN). Telemetry must never break the conversion path itself. */
+function reportConversionFailure(step: string, file: File, err: unknown): void {
+  try {
+    Sentry.captureException(err instanceof Error ? err : new Error(String(err)), {
+      tags: { source: "image_conversion", step },
+      contexts: {
+        upload: {
+          fileType: file.type || "(empty)",
+          fileName: file.name,
+          fileSizeKb: Math.round(file.size / 1024),
+        },
+      },
+    });
+  } catch {
+    /* Sentry unavailable */
+  }
+}
+
 let heicToLoaded: Promise<void> | null = null;
 
 function loadHeicTo(): Promise<void> {
   if (heicToLoaded) return heicToLoaded;
   heicToLoaded = new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = "https://my.living-apps.de/npm/heic-to/dist/iife/heic-to.js";
+    s.src = HEIC_TO_URL;
     s.onload = () => resolve();
     s.onerror = () => {
       heicToLoaded = null;
@@ -112,14 +151,14 @@ function loadHeicTo(): Promise<void> {
 }
 
 async function heicFallbackConvert(file: File): Promise<File> {
-  await loadHeicTo();
+  await withTimeout(loadHeicTo(), HEIC_SCRIPT_TIMEOUT_MS, "HEIC converter download");
   const HT = (window as any).HeicTo;
   if (!HT) throw new Error("HEIC converter not available");
-  const blob: Blob = await HT({
-    blob: file,
-    type: "image/jpeg",
-    quality: 0.92,
-  });
+  const blob: Blob = await withTimeout(
+    HT({ blob: file, type: "image/jpeg", quality: 0.92 }),
+    HEIC_DECODE_TIMEOUT_MS,
+    "HEIC decode",
+  );
   const name = file.name.replace(/\.[^.]+$/, ".jpg");
   return new File([blob], name, { type: "image/jpeg" });
 }
@@ -128,8 +167,33 @@ async function convertToJpeg(file: File): Promise<File> {
   try {
     return await canvasConvertToJpeg(file);
   } catch {
-    return await heicFallbackConvert(file);
+    // Non-Safari browsers can't decode HEIC natively and fall back to the
+    // external libheif converter. If THAT also fails (blocked script, CSP-killed
+    // worker, timeout), report it with context and surface an actionable message
+    // instead of a silent failure or an infinite spinner.
+    try {
+      return await heicFallbackConvert(file);
+    } catch (err) {
+      reportConversionFailure("heic_fallback", file, err);
+      throw new Error(
+        "Could not convert this photo. HEIC images are supported natively only in " +
+        "Safari — please re-upload it as JPEG (on iPhone: Settings > Camera > Formats " +
+        "> 'Most Compatible') or open this dashboard in Safari.",
+      );
+    }
   }
+}
+
+/** Ensures a file is a server-acceptable image before it hits POST /files.
+ *  The Living-Apps upload endpoint decodes every image server-side and 500s on
+ *  HEIC ("cannot identify image file") — so HEIC/HEIF from an iPhone is
+ *  converted to JPEG in the browser FIRST (same Safari-canvas → libheif path as
+ *  the AI photo scan). Non-image files and already-web-safe images pass through
+ *  untouched. Throws an actionable Error if conversion fails (surface it in the
+ *  upload UI, don't swallow it). */
+export async function ensureUploadableImage(file: File): Promise<File> {
+  if (!needsImageConversion(file)) return file;
+  return convertToJpeg(file);
 }
 
 function readExifFromJpeg(buf: ArrayBuffer): DataView | null {
@@ -261,15 +325,77 @@ export async function extractPhotoMeta(file: File): Promise<{
   }
 }
 
-export async function reverseGeocode(lat: number, lng: number): Promise<string> {
+export type ReverseGeocodeResult = {
+  /** Full human-readable address — fits GeoLocation.info. */
+  display: string;
+  /** Address components (Nominatim may omit any). Map these onto separate
+   *  address fields if the app has them (street / no. / zip / city). */
+  road?: string;
+  houseNumber?: string;
+  postcode?: string;
+  city?: string;
+};
+
+/** Reverse-geocode coordinates → a STRUCTURED address. `addressdetails=1` adds
+ *  the component breakdown, so a consumer can pre-fill separate fields (street,
+ *  zip, city) in addition to the full string. All components are optional. */
+export async function reverseGeocodeDetailed(lat: number, lng: number): Promise<ReverseGeocodeResult> {
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=${navigator.language}`
+      `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${lat}&lon=${lng}&accept-language=${navigator.language}`
     );
     const data = await res.json();
-    return data.display_name ?? "";
+    const a = data.address ?? {};
+    return {
+      display: data.display_name ?? "",
+      road: a.road ?? a.pedestrian ?? a.footway,
+      houseNumber: a.house_number,
+      postcode: a.postcode,
+      city: a.city ?? a.town ?? a.village ?? a.municipality,
+    };
   } catch {
-    return "";
+    return { display: "" };
+  }
+}
+
+/** Backwards-compatible string form (the full address — for GeoLocation.info). */
+export async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  return (await reverseGeocodeDetailed(lat, lng)).display;
+}
+
+/** FORWARD geocode: a free address string → the single best coordinate. Uses
+ *  Photon (Komoot/OSM) — the SAME source AddressAutocomplete uses, key-free and
+ *  built for search (unlike Nominatim, whose policy forbids per-keystroke use).
+ *  Returns null when nothing matches or the request was aborted. Forward
+ *  geocoding is inherently APPROXIMATE (an address resolves to one of several
+ *  candidates) — the caller should pair it with a visible, draggable map pin so
+ *  the result is confirmable, never write it silently as ground truth. */
+export async function geocodeAddress(
+  query: string,
+  signal?: AbortSignal,
+): Promise<{ lat: number; long: number; label: string } | null> {
+  const q = query.trim();
+  if (q.length < 3) return null;
+  try {
+    const lang = (navigator.language || "de").slice(0, 2);
+    const res = await fetch(
+      `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=1&lang=${lang}`,
+      { signal }
+    );
+    const data = await res.json();
+    const feat = data?.features?.[0];
+    const coords = feat?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length < 2) return null;
+    const [long, lat] = coords as [number, number];   // GeoJSON order is [long, lat]
+    if (typeof lat !== "number" || typeof long !== "number" || !Number.isFinite(lat) || !Number.isFinite(long)) return null;
+    const p = feat.properties ?? {};
+    const street = [p.street, p.housenumber].filter(Boolean).join(" ");
+    const label = [street || p.name, [p.postcode, p.city].filter(Boolean).join(" "), p.country]
+      .filter(Boolean)
+      .join(", ") || q;
+    return { lat, long, label };
+  } catch {
+    return null;
   }
 }
 
@@ -305,6 +431,17 @@ export function dataUriToBlob(dataUri: string): Blob {
   const arr = new Uint8Array(bytes.length);
   for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
   return new Blob([arr], { type: mime });
+}
+
+/** Synthesize a filename from a data URI's MIME type. OpenAI requires a
+ *  `filename` on every `file` content part (it derives the extension from it),
+ *  and the Responses API rejects the part outright without one — so a PDF sent
+ *  as `{ file: { file_data } }` alone fails with "Missing required parameter".
+ *  The name is only a hint for the MIME/extension, so a synthetic one is fine. */
+function filenameForDataUri(dataUri: string, base = "document"): string {
+  const mime = dataUri.match(/^data:([^;,]+)/)?.[1] ?? "application/octet-stream";
+  const ext = mime.split("/")[1]?.split("+")[0] ?? "bin";
+  return `${base}.${ext}`;
 }
 
 // --- High-level AI features ---
@@ -392,7 +529,7 @@ export async function analyzeDocument(fileDataUri: string, prompt: string): Prom
       role: "user",
       content: [
         { type: "text", text: prompt },
-        { type: "file", file: { file_data: fileDataUri } },
+        { type: "file", file: { filename: filenameForDataUri(fileDataUri), file_data: fileDataUri } },
       ],
     },
   ]);
@@ -451,7 +588,7 @@ export async function extractFromInput<T = Record<string, unknown>>(
     userContent.push(
       isImage
         ? { type: "image_url", image_url: { url: dataUri! } }
-        : { type: "file", file: { file_data: dataUri! } }
+        : { type: "file", file: { filename: filenameForDataUri(dataUri!), file_data: dataUri! } }
     );
   }
   return safeJsonCompletion([

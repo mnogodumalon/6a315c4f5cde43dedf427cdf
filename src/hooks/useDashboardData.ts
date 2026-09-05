@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Veranstaltungen, Anmeldungen, Veranstalter } from '@/types/app';
+import type { Veranstaltungen, Veranstalter, Anmeldungen } from '@/types/app';
 import { LivingAppsService } from '@/services/livingAppsService';
+import { t } from '@/i18n';
 
 /** Dashboard data + the OPTIMISTIC-WRITE API.
  *
@@ -14,24 +15,24 @@ import { LivingAppsService } from '@/services/livingAppsService';
  */
 export function useDashboardData() {
   const [veranstaltungen, setVeranstaltungen] = useState<Veranstaltungen[]>([]);
-  const [anmeldungen, setAnmeldungen] = useState<Anmeldungen[]>([]);
   const [veranstalter, setVeranstalter] = useState<Veranstalter[]>([]);
+  const [anmeldungen, setAnmeldungen] = useState<Anmeldungen[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchAll = useCallback(async () => {
     setError(null);
     try {
-      const [veranstaltungenData, anmeldungenData, veranstalterData] = await Promise.all([
+      const [veranstaltungenData, veranstalterData, anmeldungenData] = await Promise.all([
         LivingAppsService.getVeranstaltungen(),
-        LivingAppsService.getAnmeldungen(),
         LivingAppsService.getVeranstalter(),
+        LivingAppsService.getAnmeldungen(),
       ]);
       setVeranstaltungen(veranstaltungenData);
-      setAnmeldungen(anmeldungenData);
       setVeranstalter(veranstalterData);
+      setAnmeldungen(anmeldungenData);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Fehler beim Laden der Daten'));
+      setError(err instanceof Error ? err : new Error(t('data_load_failed')));
     } finally {
       setLoading(false);
     }
@@ -43,21 +44,25 @@ export function useDashboardData() {
   useEffect(() => {
     async function silentRefresh() {
       try {
-        const [veranstaltungenData, anmeldungenData, veranstalterData] = await Promise.all([
+        const [veranstaltungenData, veranstalterData, anmeldungenData] = await Promise.all([
           LivingAppsService.getVeranstaltungen(),
-          LivingAppsService.getAnmeldungen(),
           LivingAppsService.getVeranstalter(),
+          LivingAppsService.getAnmeldungen(),
         ]);
         setVeranstaltungen(veranstaltungenData);
-        setAnmeldungen(anmeldungenData);
         setVeranstalter(veranstalterData);
+        setAnmeldungen(anmeldungenData);
       } catch {
         // silently ignore — stale data is better than no data
       }
     }
     function handleRefresh() { void silentRefresh(); }
-    window.addEventListener('dashboard-refresh', handleRefresh);
-    return () => window.removeEventListener('dashboard-refresh', handleRefresh);
+    // assistant:data-changed comes from the assistant (<la-klar-assistant>)
+    // after every mutation. The element additionally fires the legacy
+    // dashboard-refresh event for OLD deployed bundles — do NOT subscribe to
+    // both here, or every mutation fetches twice.
+    window.addEventListener('assistant:data-changed', handleRefresh);
+    return () => window.removeEventListener('assistant:data-changed', handleRefresh);
   }, []);
 
   const veranstaltungenMap = useMemo(() => {
@@ -72,5 +77,8 @@ export function useDashboardData() {
     return m;
   }, [veranstalter]);
 
-  return { veranstaltungen, setVeranstaltungen, anmeldungen, setAnmeldungen, veranstalter, setVeranstalter, loading, error, fetchAll, veranstaltungenMap, veranstalterMap };
+  return { veranstaltungen, setVeranstaltungen, veranstalter, setVeranstalter, anmeldungen, setAnmeldungen, loading, error, fetchAll, veranstaltungenMap, veranstalterMap };
 }
+
+/** The hook's return — the `data` prop of DashboardOverview in the Ready-Wrapper form. */
+export type DashboardData = ReturnType<typeof useDashboardData>;

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
 import { toast, Toaster } from 'sonner';
+import { t } from '@/i18n';
 
 const APPGROUP_ID = '6a315c4f5cde43dedf427cdf';
 const REPAIR_ENDPOINT = '/claude/build/repair';
@@ -20,7 +21,7 @@ const BUG_TYPES = new Set<string>([
 ]);
 
 type ErrorSource = 'api' | 'promise' | 'js' | 'network';
-type ErrorCategory = 'user' | 'bug' | 'transient';
+type ErrorCategory = 'user' | 'bug' | 'transient' | 'auth';
 
 export interface ErrorPayload {
   source: ErrorSource;
@@ -35,6 +36,9 @@ export interface ErrorPayload {
 }
 
 function classify(err: ErrorPayload): ErrorCategory {
+  // 401/403: the Layout login screen is the surface for this — a repair run
+  // cannot fix a missing session or missing permissions.
+  if (err.status === 401 || err.status === 403) return 'auth';
   if (err.source === 'network') return 'transient';
   if (typeof err.status === 'number' && err.status >= 500) return 'transient';
   if (err.type && USER_TYPES.has(err.type)) return 'user';
@@ -67,7 +71,7 @@ export function useErrorBus(): ErrorBusValue {
 }
 
 async function runRepair(err: ErrorPayload): Promise<void> {
-  const toastId = toast.loading('Reparatur wird gestartet...');
+  const toastId = toast.loading(t('repair_starting'));
   const errorContext = JSON.stringify({
     type: err.type || 'api_error',
     source: err.source,
@@ -90,7 +94,7 @@ async function runRepair(err: ErrorPayload): Promise<void> {
     });
 
     if (!resp.ok || !resp.body) {
-      toast.error('Automatische Reparatur fehlgeschlagen. Bitte kontaktieren Sie den Support.', { id: toastId });
+      toast.error(t('repair_failed'), { id: toastId });
       return;
     }
 
@@ -113,21 +117,21 @@ async function runRepair(err: ErrorPayload): Promise<void> {
           toast.loading(content.replace(/^\[STATUS]\s*/, ''), { id: toastId });
         }
         if (content.startsWith('[DONE]')) {
-          toast.success('Das Problem wurde behoben. Bitte laden Sie die Seite neu.', { id: toastId, duration: 12000 });
+          toast.success(t('repair_done_desc'), { id: toastId, duration: 12000 });
           finished = true;
         }
         if (content.startsWith('[ERROR]') && !content.includes('Dashboard-Links')) {
-          toast.error('Automatische Reparatur fehlgeschlagen. Bitte kontaktieren Sie den Support.', { id: toastId });
+          toast.error(t('repair_failed'), { id: toastId });
           finished = true;
         }
       }
     }
 
     if (!finished) {
-      toast.error('Automatische Reparatur fehlgeschlagen. Bitte kontaktieren Sie den Support.', { id: toastId });
+      toast.error(t('repair_failed'), { id: toastId });
     }
   } catch {
-    toast.error('Automatische Reparatur fehlgeschlagen. Bitte kontaktieren Sie den Support.', { id: toastId });
+    toast.error(t('repair_failed'), { id: toastId });
   }
 }
 
@@ -142,13 +146,14 @@ export function ErrorBusProvider({ children }: { children: ReactNode }) {
     seen.current.set(key, now);
 
     const category = classify(err);
-    if (category === 'user') return;
+    if (category === 'user' || category === 'auth') return;
 
     if (category === 'transient') {
-      toast.error('Netzwerkfehler', {
-        description: err.message || err.detail || 'Verbindung zum Server verloren.',
+      const isServerError = typeof err.status === 'number' && err.status >= 500;
+      toast.error(isServerError ? t('toast_server_title') : t('toast_network_title'), {
+        description: err.message || err.detail || (isServerError ? t('toast_server_desc') : t('toast_network_desc')),
         action: {
-          label: 'Neu laden',
+          label: t('repair_reload'),
           onClick: () => window.location.reload(),
         },
         duration: TOAST_DURATION_MS,
@@ -156,10 +161,10 @@ export function ErrorBusProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    toast.error('Etwas ist schiefgelaufen', {
-      description: err.detail || err.message || 'Ein Problem wurde entdeckt. Das Dashboard kann automatisch repariert werden.',
+    toast.error(t('repair_error_title'), {
+      description: err.detail || err.message || t('toast_bug_desc'),
       action: {
-        label: 'Dashboard reparieren',
+        label: t('repair_text'),
         onClick: () => { void runRepair(err); },
       },
       duration: TOAST_DURATION_MS,
@@ -173,6 +178,17 @@ export function ErrorBusProvider({ children }: { children: ReactNode }) {
     };
     const onRejection = (e: PromiseRejectionEvent) => {
       const reason: unknown = e.reason;
+      // Aborted work is not failure. React 19's Navigation-API integration
+      // runs view transitions the browser may skip (reload mid-flight,
+      // rapid navigation) — the promise rejects with `AbortError:
+      // Transition was skipped`, uncaught by React. lib/sentry.ts filters
+      // this for the REPORT channel; this is the TOAST channel and needs
+      // its own filter, otherwise every skipped animation toasts a bug.
+      // Cancelled fetches reject with AbortError too — same verdict.
+      if (
+        (reason instanceof DOMException && reason.name === 'AbortError') ||
+        (reason instanceof Error && reason.message.includes('Transition was skipped'))
+      ) return;
       const message =
         reason instanceof Error ? reason.message :
         typeof reason === 'string' ? reason :

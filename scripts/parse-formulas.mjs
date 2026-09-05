@@ -173,8 +173,8 @@ function renderTree(node) {
 // arrow functions only appear at entry level, so depth tracking + string-
 // literal awareness is enough.
 
-function findComputedBlock(src) {
-  const m = src.match(/computed\s*:\s*\{/);
+function findBlock(src, headRe) {
+  const m = src.match(headRe);
   if (!m) return null;
   const openIdx = m.index + m[0].length - 1; // position of '{'
   let depth = 0, i = openIdx, inStr = null, esc = false;
@@ -192,6 +192,33 @@ function findComputedBlock(src) {
     i++;
   }
   return null;
+}
+
+function findComputedBlock(src) {
+  return findBlock(src, /computed\s*:\s*\{/);
+}
+
+// SELF-HEAL 3: a `defaults` entry whose value is `undefined` (or `null`).
+// DefaultSpec has no undefined member — the sub-agent writes
+// `'feld': undefined` to mean "no default for this field", which is TS2322
+// and costs a build round (live: Fahrzeuge `kunde`). The intent and the fix
+// are the same thing: the entry must simply not be there. Runs on every
+// target file, independent of the computed block.
+function stripUndefinedDefaults(src) {
+  const block = findBlock(src, /defaults\s*:\s*\{/);
+  if (!block) return { src, removed: 0 };
+  const body = stripComments(src.slice(block.open + 1, block.close));
+  const entries = splitEntries(body);
+  const kept = [];
+  let removed = 0;
+  for (const raw of entries) {
+    const ent = parseEntry(raw);
+    if (ent && (ent.value === 'undefined' || ent.value === 'null')) { removed++; continue; }
+    kept.push('    ' + raw.trim());
+  }
+  if (removed === 0) return { src, removed: 0 };
+  const rendered = kept.length ? '{\n' + kept.join(',\n') + ',\n  }' : '{}';
+  return { src: src.slice(0, block.open) + rendered + src.slice(block.close + 1), removed };
 }
 
 function stripComments(s) {
@@ -279,11 +306,11 @@ function parseEntry(entry) {
 function extractDepsFromFunction(fnStr) {
   const deps = new Set();
   const singleArg = [
+    /ctx\.num\(\s*['"`]([^'"`]+)['"`]/g,
     /ctx\.field\(\s*['"`]([^'"`]+)['"`]/g,
     /ctx\.applookup\w*\(\s*['"`]([^'"`]+)['"`]/g,
     /ctx\.lookupKey\(\s*['"`]([^'"`]+)['"`]/g,
     /ctx\.sumOver\(\s*['"`]([^'"`]+)['"`]/g,
-    /ctx\.addDays\(\s*['"`]([^'"`]+)['"`]/g,
   ];
   for (const re of singleArg) {
     for (const m of fnStr.matchAll(re)) deps.add(m[1]);
@@ -371,6 +398,24 @@ function patchApplookupRefsExport(src, refsSrc) {
   return src.trimEnd() + '\n\n' + refsSrc + '\n';
 }
 
+// Self-heal: the generated dialogs UNCONDITIONALLY import computedDeps and
+// computedApplookupRefs from every entity config, but the form-polish
+// sub-agent may Write a config file without them. rewriteFile() only reaches
+// the patch functions when `computed` has entries — with `computed: {}` it
+// early-returns and a missing export stays missing (live failure: TS2305 in
+// all three dialogs, one lost build). Runs on EVERY target file, so tsc can
+// never see a missing export regardless of what the sub-agent wrote.
+function ensureExports(src) {
+  let out = src;
+  if (!/export\s+const\s+computedDeps\b/.test(out)) {
+    out = out.trimEnd() + '\n\n' + renderDepsExport({}) + '\n';
+  }
+  if (!/export\s+const\s+computedApplookupRefs\b/.test(out)) {
+    out = out.trimEnd() + '\n\n' + renderApplookupRefsExport({}) + '\n';
+  }
+  return out;
+}
+
 function rewriteFile(src) {
   const block = findComputedBlock(src);
   if (!block) return { src, changed: false, count: 0, deps: 0 };
@@ -381,7 +426,7 @@ function rewriteFile(src) {
   const out = [];
   const funcDeps = {};
   const funcApplookupRefs = {};  // ownKey → [{lookupKey}, ...]
-  let dropped = 0, parsed = 0;
+  let dropped = 0, parsed = 0, healedParams = 0;
   for (const raw of entries) {
     const ent = parseEntry(raw);
     if (!ent) { dropped++; continue; }
@@ -402,21 +447,48 @@ function rewriteFile(src) {
       }
       continue;
     }
-    // Arrow function — leave the body alone, but mine it for ctx.* deps
-    // AND for applookup (ownKey, lookupKey) pairs.
-    out.push(`    '${ent.key}': ${v}`);
+    // Arrow function — mine it for ctx.* deps AND applookup (ownKey, lookupKey)
+    // pairs; the body stays untouched except for ONE self-heal: the sub-agent
+    // copies the `(fields, ctx) =>` signature from the examples even when the
+    // body never reads `fields` — tsconfig has noUnusedParameters, so an unused
+    // first param is TS6133 and costs a build (live failure: Rechnungsmanager
+    // _summe_netto). Rename it to `_<name>`, which tsc exempts. Idempotent:
+    // `_`-prefixed names are skipped. Property access like `it.fields.x` must
+    // NOT count as usage — hence the (?<![.\w$]) guard.
+    let fn = v;
     if (v.startsWith('(') || v.startsWith('async')) {
-      const deps = extractDepsFromFunction(v);
+      const head = fn.match(/^(?:async\s*)?\(\s*([A-Za-z$][\w$]*)\s*,/);
+      const arrow = fn.indexOf('=>');
+      if (head && arrow > 0 && !head[1].startsWith('_')) {
+        const esc = head[1].replace(/\$/g, '\\$');
+        if (!new RegExp(`(?<![.\\w$])${esc}\\b`).test(fn.slice(arrow + 2))) {
+          fn = fn.replace(head[0], head[0].replace(head[1], '_' + head[1]));
+          healedParams++;
+        }
+      }
+      // SELF-HEAL 2: a ComputedFn may only return a number. The sub-agent
+      // occasionally computes a DATE and returns a 'yyyy-MM-dd' string (live:
+      // `faelligkeitsdatum` from the removed ctx.addDays) — TS2322, and the
+      // main agent's only repair is to delete the entry, which costs a build
+      // round. Do it here: a string/template `return` inside the body means
+      // the entry can never type-check. Date prefills belong in `defaults`.
+      if (/return\s*[`'"]/.test(fn.slice(fn.indexOf('=>') + 2))) {
+        console.warn(`[parse-formulas] dropped ${ent.key}: ComputedFn must return a number (string return found) — date/text prefills belong in defaults, not computed`);
+        dropped++;
+        continue;
+      }
+      const deps = extractDepsFromFunction(fn);
       if (deps.length > 0) funcDeps[ent.key] = deps;
-      const refs = extractApplookupRefsFromFunction(v);
+      const refs = extractApplookupRefsFromFunction(fn);
       for (const r of refs) {
         (funcApplookupRefs[r.ownKey] ||= []).push({ lookupKey: r.lookupKey });
       }
     }
+    out.push(`    '${ent.key}': ${fn}`);
   }
   const hasFuncDeps = Object.keys(funcDeps).length > 0;
   const hasApplookupRefs = Object.keys(funcApplookupRefs).length > 0;
-  if (parsed === 0 && dropped === 0 && !hasFuncDeps && !hasApplookupRefs) {
+  if (parsed === 0 && dropped === 0 && !hasFuncDeps && !hasApplookupRefs && healedParams === 0) {
     return { src, changed: false, count: 0, deps: 0, applookupRefs: 0 };
   }
 
@@ -428,6 +500,7 @@ function rewriteFile(src) {
     src: updated, changed: true, count: parsed, dropped,
     deps: Object.keys(funcDeps).length,
     applookupRefs: Object.keys(funcApplookupRefs).length,
+    healedParams,
   };
 }
 
@@ -448,9 +521,23 @@ async function main() {
     catch (err) { console.warn(`[parse-formulas] skip ${name}: ${err.message}`); continue; }
     let res;
     try { res = rewriteFile(src); }
-    catch (err) { console.warn(`[parse-formulas] error in ${name}: ${err.message}`); continue; }
-    if (!res.changed) continue;
-    await writeFile(path, res.src, 'utf8');
+    catch (err) {
+      console.warn(`[parse-formulas] error in ${name}: ${err.message}`);
+      res = { src, changed: false, count: 0, dropped: 0, deps: 0, applookupRefs: 0 };
+    }
+    const defaultsHeal = stripUndefinedDefaults(res.src);
+    if (defaultsHeal.removed) {
+      console.log(`[parse-formulas] ${name}: removed ${defaultsHeal.removed} undefined default(s) (TS2322 heal — an omitted field needs no entry)`);
+    }
+    const healed = ensureExports(defaultsHeal.src);
+    if (healed !== defaultsHeal.src) {
+      console.log(`[parse-formulas] ${name}: appended missing computedDeps/computedApplookupRefs export(s)`);
+    }
+    if (res.healedParams) {
+      console.log(`[parse-formulas] ${name}: renamed ${res.healedParams} unused first param(s) to _-prefixed (TS6133 heal)`);
+    }
+    if (!res.changed && healed === src) continue;
+    await writeFile(path, healed, 'utf8');
     totalParsed += res.count;
     totalDropped += res.dropped || 0;
     totalDeps += res.deps || 0;

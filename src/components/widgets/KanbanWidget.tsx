@@ -9,7 +9,16 @@
  * a kanban orders a CATEGORY axis with no time at all. Compose; never
  * reimplement.
  *
- * @version 1.6.0
+ * @version 1.7.0
+ * @since 2026-07-27  (1.7.0: `KanbanColumn.label` is a STRING now, not
+ *                     ReactNode. Columns come from the schema's lookup values
+ *                     (key/label string pairs), and every consumer that read
+ *                     the label back out — undo toasts, aria strings,
+ *                     LookupValue writes — needed a cast under ReactNode. Two
+ *                     independent models tripped over it: the API contradicted
+ *                     the family idiom, so the API moved. Rich column headers
+ *                     stay possible via `renderColumnHeader`; card `title`
+ *                     stays ReactNode.)
  * @since 2026-06-11  (1.6.0: DRAG PROXY — a mini card rides with the pointer
  *                     (see primitives 1.6.0, Bryntum DragHelper pattern).
  *                     1.5.0: PHONE BOARD = SEPARATE COLUMN CARDS — on the
@@ -80,9 +89,15 @@
  *
  *  <KanbanWidget
  *     cards                 KanbanCard[]    — { id: string, column: string, title: ReactNode, subtitle?: ReactNode, tone? }
- *     columns               KanbanColumn[]  — ordered columns { key, label, tone? }; lowercase `columns`.
- *                                             Build them from the schema's lookup values:
+ *     columns               KanbanColumn[]  — ordered columns { key, label: string, tone? }; lowercase `columns`.
+ *                                             `label` is a plain STRING (schema lookup label) — reusable in toasts,
+ *                                             aria texts and LookupValue writes; rich headers via renderColumnHeader.
+ *                                             Build them from the schema's lookup values, INSIDE the
+ *                                             component body — never as a module-scope const:
  *                                             (LOOKUP_OPTIONS['<app>']?.['<statusfeld>'] ?? []).map(o => ({ key: o.key, label: o.label }))
+ *                                             `o.label` is a locale-aware GETTER; hoisted to module
+ *                                             scope it evaluates once at import and freezes that one
+ *                                             language (check-dashboard gate 22 rejects the hoisted form).
  *                                             Declare EVERY lookup value — never drop one to save width (see
  *                                             defaultCollapsed; an undeclared value sends its cards to the fallback).
  *     defaultCollapsed?     string[]        — column keys that START collapsed (uncontrolled seed). A collapsed
@@ -168,6 +183,31 @@ import { Button } from '@/components/ui/button';
 // Shared widget MECHANICS (M4) — tone class-maps, drag-FSM core.
 // Sister widgets never import each other; ALL import './primitives'.
 import { TONE_DOT, TONE_ACCENT, usePointerDrag, useRejectNotice, useNarrowContainer, type DragGesture, type WriteResult } from './primitives';
+import { coreLocale as i18nLocale, type CoreLocale as Locale } from '@/i18n';
+
+// The widget's OWN chrome strings — indexed at RENDER time (`KB[i18nLocale]`),
+// never hoisted into a module constant.
+const KB: Record<Locale, {
+  noStatus: string; dismiss: string; card: string; errorTitle: string; retry: string;
+  expandColumn: (label: string, n: number) => string;
+  collapseColumn: (label: string) => string;
+  newCard: (label: string) => string;
+}> = {
+  de: {
+    noStatus: 'Ohne Status', dismiss: 'Meldung schließen', card: 'Karte',
+    errorTitle: 'Board konnte nicht geladen werden', retry: 'Erneut versuchen',
+    expandColumn: (label, n) => `Spalte ${label} ausklappen (${n})`,
+    collapseColumn: (label) => `Spalte ${label} einklappen`,
+    newCard: (label) => `Neue Karte — ${label}`,
+  },
+  en: {
+    noStatus: 'No status', dismiss: 'Dismiss message', card: 'Card',
+    errorTitle: 'Board failed to load', retry: 'Try again',
+    expandColumn: (label, n) => `Expand column ${label} (${n})`,
+    collapseColumn: (label) => `Collapse column ${label}`,
+    newCard: (label) => `New card — ${label}`,
+  },
+};
 
 // Closed enums — exported as const arrays so consumers reference instead of
 // transcribe (a mistyped 'danger' was a real build failure in this family).
@@ -184,15 +224,14 @@ export type KanbanCard = {
   tone?: KanbanTone;
 };
 
-export type KanbanColumn = { key: string; label: ReactNode; tone?: KanbanTone };
+export type KanbanColumn = { key: string; label: string; tone?: KanbanTone };
 
 /** Cards whose `column` matches no declared column land here (HARD RULE 4). */
 const FALLBACK_KEY = '__ohne_status__';
 
-/** A column's label as a plain string for aria-labels; non-string labels fall
- *  back to the opaque key so the label is never "[object Object]". */
+/** A column's label for aria texts; falls back to the key on an empty label. */
 function columnAriaLabel(c: KanbanColumn): string {
-  return typeof c.label === 'string' ? c.label : c.key;
+  return c.label || c.key;
 }
 
 // ── Drag&Drop — board geometry + commit over the shared FSM core ────────
@@ -323,7 +362,7 @@ export function KanbanWidget(props: KanbanWidgetProps) {
       else orphans.push(card);
     }
     const eff: KanbanColumn[] = orphans.length
-      ? [...columns, { key: FALLBACK_KEY, label: 'Ohne Status', tone: 'warning' }]
+      ? [...columns, { key: FALLBACK_KEY, label: KB[i18nLocale].noStatus, tone: 'warning' }]
       : columns;
     if (orphans.length) buckets.set(FALLBACK_KEY, orphans);
     return { effColumns: eff, byColumn: buckets };
@@ -360,7 +399,7 @@ export function KanbanWidget(props: KanbanWidgetProps) {
   // the drop slot.
   const dragGhost = dnd.draggingMode === 'move' && draggedCard
     ? createPortal(
-        <div ref={dnd.ghostRef} className="pointer-events-none fixed left-0 top-0 z-[100] will-change-transform" aria-hidden>
+        <div ref={dnd.ghostRef} className="pointer-events-none fixed left-0 top-0 z-[var(--z-drag)] will-change-transform" aria-hidden>
           <div className={`max-w-[240px] rounded-md border-l-4 bg-card px-2 py-1.5 shadow-xl ring-1 ring-black/10 ${TONE_ACCENT[draggedCard.tone ?? 'default']}`}>
             <span className="block truncate text-xs font-semibold text-foreground">{draggedCard.title}</span>
           </div>
@@ -391,7 +430,7 @@ export function KanbanWidget(props: KanbanWidgetProps) {
           >
             <IconAlertCircle size={16} className="shrink-0" />
             <span className="min-w-0 flex-1">{reject.notice}</span>
-            <button type="button" onClick={reject.dismiss} aria-label="Meldung schließen" className="shrink-0 rounded p-0.5 transition-colors hover:bg-destructive/10">
+            <button type="button" onClick={reject.dismiss} aria-label={KB[i18nLocale].dismiss} className="shrink-0 rounded p-0.5 transition-colors hover:bg-destructive/10">
               <IconX size={14} />
             </button>
           </div>
@@ -434,7 +473,7 @@ export function KanbanWidget(props: KanbanWidgetProps) {
                     }}
                     onClick={() => { if (dnd.consumeClick()) return; toggleCollapsed(col.key); }}
                     aria-expanded={false}
-                    aria-label={`Spalte ${columnAriaLabel(col)} ausklappen (${colCards.length})`}
+                    aria-label={KB[i18nLocale].expandColumn(columnAriaLabel(col), colCards.length)}
                     className={`flex min-h-[200px] snap-start flex-col items-center gap-2 py-2 transition-colors hover:bg-secondary ${narrow ? 'rounded-2xl border border-border bg-secondary/50 shadow-sm' : 'border-l border-border bg-secondary/50 first:border-l-0'} ${isTarget ? 'ring-2 ring-inset ring-primary/60' : ''} ${columnClassName?.(col) ?? ''}`}
                   >
                     <IconChevronsRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -452,7 +491,7 @@ export function KanbanWidget(props: KanbanWidgetProps) {
                     if (isFallback) return;   // not a drop target
                     if (el) colRefs.current.set(col.key, el); else colRefs.current.delete(col.key);
                   }}
-                  className={`flex min-h-[200px] snap-start flex-col ${narrow ? 'overflow-hidden rounded-2xl border border-border bg-card shadow-sm' : 'border-l border-border first:border-l-0'} ${isTarget ? 'ring-2 ring-inset ring-primary/60' : ''} ${columnClassName?.(col) ?? ''}`}
+                  className={`flex min-h-[200px] max-sm:min-h-[7rem] snap-start flex-col ${narrow ? 'overflow-hidden rounded-2xl border border-border bg-card shadow-sm' : 'border-l border-border first:border-l-0'} ${isTarget ? 'ring-2 ring-inset ring-primary/60' : ''} ${columnClassName?.(col) ?? ''}`}
                 >
                   {/* Column header: collapse toggle + (tone dot + label + count
                       badge). The toggle belongs to the WIDGET and stays even
@@ -463,10 +502,10 @@ export function KanbanWidget(props: KanbanWidgetProps) {
                       type="button"
                       onClick={() => { if (dnd.consumeClick()) return; toggleCollapsed(col.key); }}
                       aria-expanded={true}
-                      aria-label={`Spalte ${columnAriaLabel(col)} einklappen`}
-                      className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+                      aria-label={KB[i18nLocale].collapseColumn(columnAriaLabel(col))}
+                      className="shrink-0 rounded p-0.5 max-sm:p-2 text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
                     >
-                      <IconChevronsLeft className="h-3.5 w-3.5" />
+                      <IconChevronsLeft className="h-3.5 w-3.5 max-sm:h-5 max-sm:w-5" />
                     </button>
                     <div className="min-w-0 flex-1">
                       {renderColumnHeader && !isFallback ? renderColumnHeader(col) : (
@@ -494,10 +533,10 @@ export function KanbanWidget(props: KanbanWidgetProps) {
                       <button
                         type="button"
                         onClick={() => { if (dnd.consumeClick()) return; onAddCard(col.key); }}
-                        aria-label={`Neue Karte — ${columnAriaLabel(col)}`}
-                        className="mt-auto flex items-center justify-center gap-1 rounded-md border border-dashed border-border py-1.5 text-[11px] font-medium text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
+                        aria-label={KB[i18nLocale].newCard(columnAriaLabel(col))}
+                        className="mt-auto flex items-center justify-center gap-1 rounded-md border border-dashed border-border py-1.5 max-sm:py-3 max-sm:min-h-11 text-[11px] max-sm:text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors"
                       >
-                        <IconPlus className="h-3.5 w-3.5" />Karte
+                        <IconPlus className="h-3.5 w-3.5 max-sm:h-4 max-sm:w-4" />{KB[i18nLocale].card}
                       </button>
                     )}
                   </div>
@@ -531,10 +570,10 @@ function CardView({ card, dnd, geom, onCardClick, renderCard, narrow = false }: 
       type="button"
       onClick={(e) => { e.stopPropagation(); if (dnd.consumeClick()) return; onCardClick?.(card); }}
       {...cardDragProps(card, dnd, geom)}
-      className={`flex flex-col gap-0.5 rounded-md border-l-4 px-2 py-1.5 text-left min-w-0 ${TONE_ACCENT[card.tone ?? 'default']} ${dnd.draggingId === card.id ? 'opacity-40' : ''} hover:shadow-sm transition-shadow`}
+      className={`flex flex-col border-l-4 text-left min-w-0 ${narrow ? 'gap-1 rounded-xl px-3 py-3 min-h-[56px] justify-center' : 'gap-0.5 rounded-md px-2 py-1.5'} ${TONE_ACCENT[card.tone ?? 'default']} ${dnd.draggingId === card.id ? 'opacity-40' : ''} hover:shadow-sm transition-shadow`}
     >
-      <span className={`truncate font-semibold text-foreground ${narrow ? 'text-[13px]' : 'text-xs'}`}>{card.title}</span>
-      {card.subtitle != null && card.subtitle !== '' && <span className={`truncate text-muted-foreground ${narrow ? 'text-xs' : 'text-[11px]'}`}>{card.subtitle}</span>}
+      <span className={`truncate font-semibold text-foreground ${narrow ? 'text-[15px]' : 'text-xs'}`}>{card.title}</span>
+      {card.subtitle != null && card.subtitle !== '' && <span className={`truncate text-muted-foreground ${narrow ? 'text-[13px]' : 'text-[11px]'}`}>{card.subtitle}</span>}
     </button>
   );
 }
@@ -567,7 +606,7 @@ type KanbanErrorProps = {
   className?: string;
 };
 
-export function KanbanError({ error, title = 'Board konnte nicht geladen werden', onRetry, retryLabel = 'Erneut versuchen', icon: Icon = IconAlertCircle, className }: KanbanErrorProps) {
+export function KanbanError({ error, title = KB[i18nLocale].errorTitle, onRetry, retryLabel = KB[i18nLocale].retry, icon: Icon = IconAlertCircle, className }: KanbanErrorProps) {
   const message = typeof error === 'string' ? error : error.message;
   return (
     <div className={`flex flex-col items-center justify-center gap-4 rounded-[27px] bg-card shadow-lg py-24 text-center${className ? ` ${className}` : ''}`}>

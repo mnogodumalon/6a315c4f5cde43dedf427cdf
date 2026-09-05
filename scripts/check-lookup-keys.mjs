@@ -47,10 +47,44 @@ function walk(dir, out = []) {
   return out;
 }
 
+// Comments must be INVISIBLE to this gate. A live build went red on the
+// EXAMPLE inside SatelliteSection's own JSDoc (`overlay.push({ typ: 'mangel',
+// … })` — a doc example from another app, in a file the agent must not edit),
+// and the repair agent could only get past it by mangling that comment; the
+// next build regenerates the file and the dance starts over. Layout-preserving
+// and string-aware: comment characters become spaces, newlines stay, so line
+// numbers still match the raw file — and a URL inside a string literal
+// ('https://…') is not mistaken for a line comment.
+function stripCommentsKeepLayout(s) {
+  let out = '';
+  let i = 0, inStr = null, esc = false;
+  while (i < s.length) {
+    const c = s[i], n = s[i + 1];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === inStr) inStr = null;
+      out += c; i++; continue;
+    }
+    if (c === '"' || c === "'" || c === '`') { inStr = c; out += c; i++; continue; }
+    if (c === '/' && n === '/') {
+      while (i < s.length && s[i] !== '\n') { out += ' '; i++; }
+      continue;
+    }
+    if (c === '/' && n === '*') {
+      while (i < s.length && !(s[i] === '*' && s[i + 1] === '/')) { out += s[i] === '\n' ? '\n' : ' '; i++; }
+      if (i < s.length) { out += '  '; i += 2; }
+      continue;
+    }
+    out += c; i++;
+  }
+  return out;
+}
+
 const errors = [];
 const files = ROOTS.flatMap(r => walk(r)).filter(f => !SKIP.test(f));
 for (const file of files) {
-  const lines = readFileSync(file, 'utf8').split('\n');
+  const lines = stripCommentsKeepLayout(readFileSync(file, 'utf8')).split('\n');
   lines.forEach((line, i) => {
     for (const [field, keys] of Object.entries(VALID_KEYS)) {
       // property-assignment syntax only: `field: 'literal'` / `field: "literal"`
@@ -58,6 +92,12 @@ for (const file of files) {
       let m;
       while ((m = re.exec(line)) !== null) {
         const val = m[2];
+        // An EMPTY literal is "nothing selected yet", never an invented key —
+        // `const INITIAL = { <lookupfield>: '' }` is the natural seed of an
+        // unselected radio group on a public form. Reporting it sent a repair
+        // agent through three attempts (union type → cast → renaming the whole
+        // field, plus every read site) for a value that was already correct.
+        if (val === '') continue;
         if (!keys.includes(val)) {
           errors.push(
             `${file}:${i + 1}: '${val}' is not a valid key for '${field}' — valid: ${keys.join(' | ')}. ` +

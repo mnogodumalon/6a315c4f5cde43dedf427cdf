@@ -16,6 +16,7 @@ import {
   IconPaperclip, IconPlus, IconTrash, IconUpload, IconExternalLink,
   IconFile, IconLink, IconNote, IconBraces, IconLoader2,
 } from '@tabler/icons-react';
+import { t } from '@/i18n';
 
 interface AttachmentsSectionProps {
   appId: string;
@@ -80,12 +81,12 @@ function formatRelative(iso?: string | null): string {
   const d = new Date(iso);
   const diffMs = Date.now() - d.getTime();
   const m = Math.round(diffMs / 60000);
-  if (m < 1) return 'gerade eben';
-  if (m < 60) return `vor ${m} Min`;
+  if (m < 1) return t('attachments_rel_just_now');
+  if (m < 60) return `${t('attachments_rel_min_prefix')}${m} ${t('attachments_rel_min')}`;
   const h = Math.round(m / 60);
-  if (h < 24) return `vor ${h} Std`;
+  if (h < 24) return `${t('attachments_rel_hr_prefix')}${h} ${t('attachments_rel_hr')}`;
   const days = Math.round(h / 24);
-  if (days < 30) return `vor ${days} Tagen`;
+  if (days < 30) return `${t('attachments_rel_day_prefix')}${days} ${t('attachments_rel_day')}`;
   return d.toLocaleDateString();
 }
 
@@ -104,6 +105,7 @@ function AddAttachmentDialog({ open, onClose, onCreated, appId, recordId }: AddD
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -122,6 +124,7 @@ function AddAttachmentDialog({ open, onClose, onCreated, appId, recordId }: AddD
 
   async function uploadAndAttach(file: File) {
     setUploading(true);
+    setUploadError(null);
     try {
       const url = await uploadFile(file, file.name);
       await createRecordAttachment(appId, recordId, {
@@ -131,6 +134,8 @@ function AddAttachmentDialog({ open, onClose, onCreated, appId, recordId }: AddD
       });
       onCreated();
       onClose();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : t('attachments_upload_failed'));
     } finally {
       setUploading(false);
     }
@@ -173,7 +178,7 @@ function AddAttachmentDialog({ open, onClose, onCreated, appId, recordId }: AddD
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <IconPaperclip className="h-4 w-4" />
-            Anhang hinzufügen
+            {t('attachments_add_dialog_title')}
           </DialogTitle>
         </DialogHeader>
 
@@ -202,13 +207,13 @@ function AddAttachmentDialog({ open, onClose, onCreated, appId, recordId }: AddD
               {uploading ? (
                 <>
                   <IconLoader2 className="h-8 w-8 text-primary animate-spin" />
-                  <p className="text-sm text-muted-foreground">Hochladen…</p>
+                  <p className="text-sm text-muted-foreground">{t('attachments_uploading')}</p>
                 </>
               ) : (
                 <>
                   <IconUpload className="h-8 w-8 text-muted-foreground/70" />
-                  <p className="text-sm font-medium">Datei hier ablegen oder klicken</p>
-                  <p className="text-xs text-muted-foreground">PDFs, Bilder, Dokumente</p>
+                  <p className="text-sm font-medium">{t('attachments_dz_hint')}</p>
+                  <p className="text-xs text-muted-foreground">{t('attachments_dz_subhint')}</p>
                 </>
               )}
             </div>
@@ -224,10 +229,14 @@ function AddAttachmentDialog({ open, onClose, onCreated, appId, recordId }: AddD
             />
           </div>
 
+          {uploadError && (
+            <p className="text-sm text-destructive text-center px-3" role="alert">{uploadError}</p>
+          )}
+
           {/* Divider */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted-foreground uppercase tracking-wide">oder</span>
+            <span className="text-xs text-muted-foreground uppercase tracking-wide">{t('attachments_or')}</span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
@@ -241,7 +250,7 @@ function AddAttachmentDialog({ open, onClose, onCreated, appId, recordId }: AddD
               onChange={e => setText(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={busy}
-              placeholder="Notiz, Bild oder URL"
+              placeholder={t('attachments_input_placeholder')}
               className="pl-9 h-10"
               autoFocus
             />
@@ -250,7 +259,7 @@ function AddAttachmentDialog({ open, onClose, onCreated, appId, recordId }: AddD
 
         <DialogFooter className="gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-            Abbrechen
+            {t('cancel')}
           </Button>
           <Button
             type="button"
@@ -258,7 +267,7 @@ function AddAttachmentDialog({ open, onClose, onCreated, appId, recordId }: AddD
             disabled={!text.trim() || busy}
           >
             {submitting && <IconLoader2 className="h-4 w-4 mr-1.5 animate-spin" />}
-            Anhang hinzufügen
+            {t('attachments_add')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -295,10 +304,10 @@ export function AttachmentsSection({ appId, recordId, readOnly = false }: Attach
       <div className="space-y-2">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
           <IconPaperclip className="h-4 w-4" />
-          Anhänge
+          {t('attachments_label')}
         </h3>
         <p className="text-xs text-muted-foreground">
-          Datensatz zuerst speichern, dann können Anhänge hinzugefügt werden.
+          {t('attachments_save_record_first')}
         </p>
       </div>
     );
@@ -354,7 +363,7 @@ export function AttachmentsSection({ appId, recordId, readOnly = false }: Attach
       <div className="flex items-center justify-between">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
           <IconPaperclip className="h-4 w-4" />
-          Anhänge
+          {t('attachments_label')}
           {items.length > 0 && (
             <span className="ml-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-muted text-[10px] font-semibold text-muted-foreground px-1.5">
               {items.length}
@@ -374,7 +383,7 @@ export function AttachmentsSection({ appId, recordId, readOnly = false }: Attach
             ) : (
               <IconPlus className="h-3.5 w-3.5 mr-1" />
             )}
-            Anhang hinzufügen
+            {t('attachments_add')}
           </Button>
         )}
       </div>
@@ -382,7 +391,7 @@ export function AttachmentsSection({ appId, recordId, readOnly = false }: Attach
       {loading && items.length === 0 && (
         <p className="text-xs text-muted-foreground flex items-center gap-1.5">
           <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-          Lade Anhänge…
+          {t('attachments_loading')}
         </p>
       )}
 
@@ -416,10 +425,10 @@ export function AttachmentsSection({ appId, recordId, readOnly = false }: Attach
                   <div className="flex-1 min-w-0">
                     {att.type === 'file' && att.value && (
                       <>
-                        <p className="text-sm font-medium truncate">{att.label ?? 'Datei'}</p>
+                        <p className="text-sm font-medium truncate">{att.label ?? t('attachments_value_file')}</p>
                         <p className="text-xs text-primary inline-flex items-center gap-1">
                           <IconExternalLink className="h-3 w-3" />
-                          Öffnen
+                          {t('attachments_open')}
                         </p>
                       </>
                     )}
@@ -465,7 +474,7 @@ export function AttachmentsSection({ appId, recordId, readOnly = false }: Attach
                         e.stopPropagation();
                         setDeleteTarget(att);
                       }}
-                      aria-label="Löschen"
+                      aria-label={t('delete')}
                       className="h-8 w-8 p-0 shrink-0 text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10"
                     >
                       <IconTrash className="h-4 w-4" />
@@ -478,7 +487,7 @@ export function AttachmentsSection({ appId, recordId, readOnly = false }: Attach
         </ul>
       ) : !loading ? (
         <p className="text-xs text-muted-foreground py-1">
-          Keine Anhänge vorhanden
+          {t('attachments_empty')}
         </p>
       ) : null}
 
@@ -487,7 +496,7 @@ export function AttachmentsSection({ appId, recordId, readOnly = false }: Attach
         <div className="absolute inset-0 rounded-lg border-2 border-dashed border-primary bg-primary/10 flex items-center justify-center pointer-events-none z-10">
           <div className="flex flex-col items-center gap-1.5">
             <IconUpload className="h-7 w-7 text-primary" />
-            <p className="text-sm font-medium text-primary">Datei loslassen zum Hochladen</p>
+            <p className="text-sm font-medium text-primary">{t('attachments_drop_to_upload')}</p>
           </div>
         </div>
       )}
@@ -510,8 +519,8 @@ export function AttachmentsSection({ appId, recordId, readOnly = false }: Attach
             if (deleteTarget) void handleDelete(deleteTarget.id);
             setDeleteTarget(null);
           }}
-          title="Anhang löschen?"
-          description={deleteTarget?.label ? `«${deleteTarget.label}»` : 'Dieser Anhang wird unwiederbringlich entfernt.'}
+          title={t('attachments_delete_title')}
+          description={deleteTarget?.label ? `«${deleteTarget.label}»` : t('attachments_delete_desc')}
         />
       )}
     </div>

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { lookupKey } from '@/lib/formatters';
+import { tx } from '@/i18n';
 
 // Empty PROXY_BASE → relative URLs (dashboard and form-proxy share the domain).
 const PROXY_BASE = '';
@@ -22,7 +23,7 @@ async function submitPublicForm(fields: Record<string, unknown>, captchaToken: s
   });
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || 'Submission failed');
+    throw new Error(err || tx('Submission failed'));
   }
   return res.json();
 }
@@ -81,7 +82,7 @@ export default function PublicFormVeranstalter() {
     e.preventDefault();
     const token = readCaptchaToken();
     if (!token) {
-      setError('Bitte warte auf die Spam-Prüfung und versuche es erneut.');
+      setError(tx('Bitte warte auf die Spam-Prüfung und versuche es erneut.'));
       return;
     }
     setSubmitting(true);
@@ -90,7 +91,7 @@ export default function PublicFormVeranstalter() {
       await submitPublicForm(cleanFields(fields), token);
       setSubmitted(true);
     } catch (err: any) {
-      setError(err.message || 'Etwas ist schiefgelaufen. Bitte versuche es erneut.');
+      setError(err.message || tx('Etwas ist schiefgelaufen. Bitte versuche es erneut.'));
     } finally {
       setSubmitting(false);
     }
@@ -105,10 +106,10 @@ export default function PublicFormVeranstalter() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold">Vielen Dank!</h2>
-          <p className="text-muted-foreground">Deine Eingabe wurde erfolgreich übermittelt.</p>
+          <h2 className="text-xl font-bold">{tx('Vielen Dank!')}</h2>
+          <p className="text-muted-foreground">{tx('Deine Eingabe wurde erfolgreich übermittelt.')}</p>
           <Button variant="outline" className="mt-4" onClick={() => { setSubmitted(false); setFields({}); }}>
-            Weitere Eingabe
+            {tx('Weitere Eingabe')}
           </Button>
         </div>
       </div>
@@ -119,12 +120,12 @@ export default function PublicFormVeranstalter() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground">Veranstalter — Formular</h1>
+          <h1 className="text-2xl font-bold text-foreground">{tx('Veranstalter — Formular')}</h1>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
           <div className="space-y-2">
-            <Label htmlFor="organisation_name">Name der Organisation</Label>
+            <Label htmlFor="organisation_name">{tx('Name der Organisation')}</Label>
             <Input
               id="organisation_name"
               placeholder=""
@@ -133,7 +134,7 @@ export default function PublicFormVeranstalter() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="organisation_typ">Typ der Organisation</Label>
+            <Label htmlFor="organisation_typ">{tx('Typ der Organisation')}</Label>
             <div role="radiogroup" className="flex flex-wrap gap-1.5">
               <button
                 type="button"
@@ -146,7 +147,7 @@ export default function PublicFormVeranstalter() {
                     : 'bg-background text-foreground border-input hover:bg-accent'
                 }`}
               >
-                Verein
+                {tx('Verein')}
               </button>
               <button
                 type="button"
@@ -159,7 +160,7 @@ export default function PublicFormVeranstalter() {
                     : 'bg-background text-foreground border-input hover:bg-accent'
                 }`}
               >
-                Kommune
+                {tx('Kommune')}
               </button>
               <button
                 type="button"
@@ -172,12 +173,12 @@ export default function PublicFormVeranstalter() {
                     : 'bg-background text-foreground border-input hover:bg-accent'
                 }`}
               >
-                Sonstige Organisation
+                {tx('Sonstige Organisation')}
               </button>
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ansprechpartner_vorname">Vorname Ansprechpartner</Label>
+            <Label htmlFor="ansprechpartner_vorname">{tx('Vorname Ansprechpartner')}</Label>
             <Input
               id="ansprechpartner_vorname"
               placeholder=""
@@ -186,7 +187,7 @@ export default function PublicFormVeranstalter() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ansprechpartner_nachname">Nachname Ansprechpartner</Label>
+            <Label htmlFor="ansprechpartner_nachname">{tx('Nachname Ansprechpartner')}</Label>
             <Input
               id="ansprechpartner_nachname"
               placeholder=""
@@ -195,7 +196,7 @@ export default function PublicFormVeranstalter() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">E-Mail-Adresse</Label>
+            <Label htmlFor="email">{tx('E-Mail-Adresse')}</Label>
             <Input
               id="email"
               type="email"
@@ -205,7 +206,7 @@ export default function PublicFormVeranstalter() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="telefon">Telefonnummer</Label>
+            <Label htmlFor="telefon">{tx('Telefonnummer')}</Label>
             <Input
               id="telefon"
               value={fields.telefon ?? ''}
@@ -213,7 +214,7 @@ export default function PublicFormVeranstalter() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="strasse">Straße</Label>
+            <Label htmlFor="strasse">{tx('Straße')}</Label>
             <Input
               id="strasse"
               placeholder=""
@@ -222,7 +223,7 @@ export default function PublicFormVeranstalter() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="hausnummer">Hausnummer</Label>
+            <Label htmlFor="hausnummer">{tx('Hausnummer')}</Label>
             <Input
               id="hausnummer"
               placeholder=""
@@ -231,7 +232,7 @@ export default function PublicFormVeranstalter() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="plz">Postleitzahl</Label>
+            <Label htmlFor="plz">{tx('Postleitzahl')}</Label>
             <Input
               id="plz"
               placeholder=""
@@ -240,7 +241,7 @@ export default function PublicFormVeranstalter() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ort">Ort</Label>
+            <Label htmlFor="ort">{tx('Ort')}</Label>
             <Input
               id="ort"
               placeholder=""
@@ -249,7 +250,7 @@ export default function PublicFormVeranstalter() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="website">Website</Label>
+            <Label htmlFor="website">{tx('Website')}</Label>
             <Input
               id="website"
               value={fields.website ?? ''}
@@ -257,7 +258,7 @@ export default function PublicFormVeranstalter() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="beschreibung">Beschreibung der Organisation</Label>
+            <Label htmlFor="beschreibung">{tx('Beschreibung der Organisation')}</Label>
             <Textarea
               id="beschreibung"
               placeholder=""
@@ -281,12 +282,12 @@ export default function PublicFormVeranstalter() {
           )}
 
           <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? 'Wird gesendet...' : 'Absenden'}
+            {submitting ? tx('Wird gesendet...') : tx('Absenden')}
           </Button>
         </form>
 
         <p className="text-xs text-muted-foreground text-center mt-4">
-          Powered by Klar
+          {tx('Powered by Klar')}
         </p>
       </div>
     </div>

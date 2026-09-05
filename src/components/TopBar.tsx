@@ -1,8 +1,34 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { IconArrowsDownUp, IconFlask, IconPlus } from '@tabler/icons-react';
 import { getHeaderProfile, getAppGroups } from '@/services/livingAppsService';
 import type { HeaderProfile, AppGroupInfo } from '@/services/livingAppsService';
-import { useActions } from '@/context/ActionsContext';
+
+function readChannelCookie(): boolean {
+  try {
+    return document.cookie.split(';').some(c => c.trim().startsWith('channel=beta'));
+  } catch { return false; }
+}
+
+function useAssistantFlags() {
+  const [devMode, setDevModeState] = useState(() => {
+    try { return localStorage.getItem('developer-mode') === 'true'; } catch { return false; }
+  });
+  const [betaMode, setBetaModeState] = useState(() => {
+    try { return readChannelCookie(); } catch { return false; }
+  });
+  const setDevMode = useCallback((v: boolean) => {
+    setDevModeState(v);
+    try { localStorage.setItem('developer-mode', String(v)); } catch { /* private mode */ }
+    window.dispatchEvent(new Event('assistant:flags-changed'));
+  }, []);
+  const setBetaMode = useCallback((v: boolean) => {
+    setBetaModeState(v);
+    const value = v ? 'beta' : 'stable';
+    document.cookie = `channel=${value}; path=/; max-age=31536000; SameSite=Lax`;
+    window.dispatchEvent(new Event('assistant:flags-changed'));
+  }, []);
+  return { devMode, setDevMode, betaMode, setBetaMode };
+}
 
 function AppsIcon({ size = 20, className = '' }: { size?: number; className?: string }) {
   return (
@@ -46,7 +72,7 @@ const SORT_LABELS: Record<SortMode, string> = {
 };
 
 export function TopBar() {
-  const { devMode, setDevMode, betaMode, setBetaMode } = useActions();
+  const { devMode, setDevMode, betaMode, setBetaMode } = useAssistantFlags();
   const [profile, setProfile] = useState<HeaderProfile | null>(null);
   const [appGroups, setAppGroups] = useState<AppGroupInfo[]>([]);
   const [appsOpen, setAppsOpen] = useState(false);

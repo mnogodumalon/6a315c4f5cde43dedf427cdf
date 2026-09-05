@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconCheck, IconChevronDown, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
+import { t } from '@/i18n';
 
 interface ComboboxItem {
   id: string;
@@ -51,8 +52,9 @@ function initialsFor(label: string): string {
 export function Combobox({
   items, value, onChange,
   placeholder,
-  searchPlaceholder = 'Suchen…',
-  emptyText = 'Kein Treffer',
+  // Destructuring defaults run on every render — they follow a language switch.
+  searchPlaceholder = t('combo_search'),
+  emptyText = t('combo_no_match'),
   disabled = false,
   id,
   invalid = false,
@@ -121,7 +123,7 @@ export function Combobox({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen(o => !o)}
-        className={`flex h-10 w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm
+        className={`flex h-10 max-sm:h-12 w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm
           ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2
           disabled:cursor-not-allowed disabled:opacity-50
           ${invalid ? 'border-destructive' : 'border-input'}`}
@@ -140,7 +142,7 @@ export function Combobox({
               type="button"
               onClick={e => { e.stopPropagation(); onChange(null); }}
               className="shrink-0 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Auswahl entfernen"
+              aria-label={t('combo_clear_selection')}
             >
               <IconX size={14} />
             </button>
@@ -171,7 +173,7 @@ export function Combobox({
                 type="button"
                 onClick={() => setQuery('')}
                 className="rounded-full p-0.5 text-muted-foreground hover:bg-muted"
-                aria-label="Suche leeren"
+                aria-label={t('combo_clear_search')}
               >
                 <IconX size={12} />
               </button>
@@ -191,11 +193,11 @@ export function Combobox({
                   <span className="flex-1 min-w-0">
                     <span className="block truncate font-medium text-primary">
                       {query.trim()
-                        ? <>„{query.trim()}" anlegen</>
-                        : <>+ {createLabel ?? 'Neuen Eintrag anlegen'}</>}
+                        ? t('combo_create_named', { name: query.trim() })
+                        : <>+ {createLabel ?? t('combo_create_new')}</>}
                     </span>
                     <span className="block truncate text-[11px] text-muted-foreground">
-                      {query.trim() ? `Übernimmt den Suchtext als Vorbelegung` : (createLabel ?? 'Direkt im Dialog erfassen')}
+                      {query.trim() ? t('combo_create_prefill_hint') : (createLabel ?? t('combo_create_inline_hint'))}
                     </span>
                   </span>
                 </button>
@@ -239,7 +241,7 @@ export function Combobox({
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
                       <IconPlus size={12} />
                     </span>
-                    <span className="font-medium">+ {createLabel ?? 'Neuen Eintrag'} anlegen</span>
+                    <span className="font-medium">+ {createLabel ? t('combo_create_labeled', { label: createLabel }) : t('combo_create_new')}</span>
                   </button>
                 )}
               </>
@@ -279,8 +281,8 @@ interface MultiComboboxProps {
 export function MultiCombobox({
   items, values, onChange,
   placeholder,
-  searchPlaceholder = 'Suchen…',
-  emptyText = 'Kein Treffer',
+  searchPlaceholder = t('combo_search'),
+  emptyText = t('combo_no_match'),
   disabled = false,
   id,
   invalid = false,
@@ -380,7 +382,7 @@ export function MultiCombobox({
                 type="button"
                 onClick={e => { e.stopPropagation(); onChange(values.filter(v => v !== item.id)); }}
                 className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label={`${item.label} entfernen`}
+                aria-label={t('combo_remove_item', { label: item.label })}
               >
                 <IconX size={12} />
               </button>
@@ -395,7 +397,7 @@ export function MultiCombobox({
             className="inline-flex flex-1 min-w-[120px] items-center gap-1 px-1 py-0.5 text-left text-muted-foreground"
           >
             <span className="flex-1 truncate text-left">
-              {selected.length === 0 ? triggerPlaceholder : (open ? '' : '+ Hinzufügen')}
+              {selected.length === 0 ? triggerPlaceholder : (open ? '' : t('combo_add_more'))}
             </span>
             <IconChevronDown size={14} className="shrink-0" />
           </button>
@@ -422,7 +424,7 @@ export function MultiCombobox({
                 type="button"
                 onClick={() => setQuery('')}
                 className="rounded-full p-0.5 text-muted-foreground hover:bg-muted"
-                aria-label="Suche leeren"
+                aria-label={t('combo_clear_search')}
               >
                 <IconX size={12} />
               </button>
@@ -442,8 +444,8 @@ export function MultiCombobox({
                   <span className="flex-1 min-w-0">
                     <span className="block truncate font-medium text-primary">
                       {query.trim()
-                        ? <>„{query.trim()}" anlegen</>
-                        : <>+ {createLabel ?? 'Neuen Eintrag anlegen'}</>}
+                        ? t('combo_create_named', { name: query.trim() })
+                        : <>+ {createLabel ?? t('combo_create_new')}</>}
                     </span>
                   </span>
                 </button>
@@ -487,7 +489,7 @@ export function MultiCombobox({
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10">
                       <IconPlus size={12} />
                     </span>
-                    <span className="font-medium">+ {createLabel ?? 'Neuen Eintrag'} anlegen</span>
+                    <span className="font-medium">+ {createLabel ? t('combo_create_labeled', { label: createLabel }) : t('combo_create_new')}</span>
                   </button>
                 )}
               </>

@@ -69,6 +69,25 @@ import {
   IconX, IconChevronLeft, IconChevronRight, IconZoomIn, IconZoomOut,
   IconZoomReset, IconDownload, IconFile, IconFileTypePdf,
 } from '@tabler/icons-react';
+import { coreLocale as i18nLocale, type CoreLocale as Locale } from '@/i18n';
+
+// The widget's OWN chrome strings — indexed at RENDER time (`MV[i18nLocale]`),
+// never hoisted into a module constant.
+const MV: Record<Locale, {
+  file: string; openPreview: string; zoomOut: string; zoomReset: string;
+  zoomIn: string; close: string; prev: string; next: string;
+}> = {
+  de: {
+    file: 'Datei', openPreview: 'Vorschau öffnen', zoomOut: 'Verkleinern',
+    zoomReset: 'Zoom zurücksetzen', zoomIn: 'Vergrößern', close: 'Schließen',
+    prev: 'Vorheriges', next: 'Nächstes',
+  },
+  en: {
+    file: 'File', openPreview: 'Open preview', zoomOut: 'Zoom out',
+    zoomReset: 'Reset zoom', zoomIn: 'Zoom in', close: 'Close',
+    prev: 'Previous', next: 'Next',
+  },
+};
 
 export type MediaKind = 'image' | 'pdf' | 'file';
 export type MediaItem = { url: string; title?: string; kind?: MediaKind };
@@ -91,9 +110,9 @@ export function inferMediaKind(url: string): MediaKind {
 function fileName(url: string): string {
   try {
     const clean = url.split(/[?#]/)[0];
-    return decodeURIComponent(clean.substring(clean.lastIndexOf('/') + 1)) || 'Datei';
+    return decodeURIComponent(clean.substring(clean.lastIndexOf('/') + 1)) || MV[i18nLocale].file;
   } catch {
-    return 'Datei';
+    return MV[i18nLocale].file;
   }
 }
 
@@ -136,7 +155,7 @@ export function MediaThumbnail({ src, alt = '', kind, fit = 'cover', className, 
         type="button"
         onClick={handleClick}
         className={`group relative block overflow-hidden bg-muted text-left ${className ?? ''}`}
-        aria-label={alt || 'Vorschau öffnen'}
+        aria-label={alt || MV[i18nLocale].openPreview}
       >
         {inner}
         <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors">
@@ -264,7 +283,7 @@ export function MediaLightbox({ open, items, index, onClose, onIndexChange }: Me
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-[var(--z-lightbox)] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -278,12 +297,12 @@ export function MediaLightbox({ open, items, index, onClose, onIndexChange }: Me
         <div className="flex items-center gap-1">
           {canZoom && (
             <>
-              <LightboxBtn onClick={zoomOut} label="Verkleinern"><IconZoomOut size={18} /></LightboxBtn>
-              <LightboxBtn onClick={resetZoom} label="Zoom zurücksetzen"><IconZoomReset size={18} /></LightboxBtn>
-              <LightboxBtn onClick={zoomIn} label="Vergrößern"><IconZoomIn size={18} /></LightboxBtn>
+              <LightboxBtn onClick={zoomOut} label={MV[i18nLocale].zoomOut}><IconZoomOut size={18} /></LightboxBtn>
+              <LightboxBtn onClick={resetZoom} label={MV[i18nLocale].zoomReset}><IconZoomReset size={18} /></LightboxBtn>
+              <LightboxBtn onClick={zoomIn} label={MV[i18nLocale].zoomIn}><IconZoomIn size={18} /></LightboxBtn>
             </>
           )}
-          <LightboxBtn onClick={onClose} label="Schließen"><IconX size={18} /></LightboxBtn>
+          <LightboxBtn onClick={onClose} label={MV[i18nLocale].close}><IconX size={18} /></LightboxBtn>
         </div>
       </div>
 
@@ -292,7 +311,7 @@ export function MediaLightbox({ open, items, index, onClose, onIndexChange }: Me
         <button
           type="button"
           onClick={e => { e.stopPropagation(); goPrev(); }}
-          aria-label="Vorheriges"
+          aria-label={MV[i18nLocale].prev}
           className="absolute left-3 top-1/2 -translate-y-1/2 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
         >
           <IconChevronLeft size={24} />
@@ -302,7 +321,7 @@ export function MediaLightbox({ open, items, index, onClose, onIndexChange }: Me
         <button
           type="button"
           onClick={e => { e.stopPropagation(); goNext(); }}
-          aria-label="Nächstes"
+          aria-label={MV[i18nLocale].next}
           className="absolute right-3 top-1/2 -translate-y-1/2 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
         >
           <IconChevronRight size={24} />

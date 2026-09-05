@@ -17,7 +17,7 @@
  * methods `getBuchung()` / `getZimmer()` / `updateBuchungEntry(id, fields)`.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { de } from 'date-fns/locale';
+import { dateFnsLocale } from '@/i18n';
 import { parseISO, isWithinInterval, startOfMonth, endOfMonth } from 'date-fns';
 import { LivingAppsService, extractRecordId, createRecordUrl } from '@/services/livingAppsService';
 import type { Buchung, Zimmer } from '@/types/app';
@@ -195,7 +195,7 @@ export function HotelOccupancyExample() {
         axis="day"
         defaultRange="week"
         defaultDate={seedDate}
-        locale={de}
+        locale={dateFnsLocale()}  // runtime locale — never pin date-fns `de` here
         onEventClick={ev => overlay.replace({ type: EVENT_PREFIX, id: buchungIdOf(ev.id) })}
         onEventDrop={reschedule}
         // Drag-to-create: drag across empty day cells IN A ROW → a stay for

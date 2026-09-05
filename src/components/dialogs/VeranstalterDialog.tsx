@@ -1,3 +1,17 @@
+/**
+ * VeranstalterDialog — pre-generated create/edit dialog for Veranstalter.
+ *
+ * Props: open, onClose, onSubmit(fields) => Promise<void>, defaultValues?,
+ * recordId? (pass when EDITING — enables the attachments section),
+ * enablePhotoScan?, enablePhotoLocation?.
+ *
+ * defaultValues is SHAPE-TOLERANT and its prop type is the EXPORTED
+ * VeranstalterDialogDefaults — NOT the entity field type: lookup fields accept
+ * the bare KEY string (or LookupValue), applookup fields the bare record id
+ * (or record URL); the dialog normalizes. Type prefill STATE with the export:
+ *  ❌ useState<Partial<Veranstalter['fields']>>({ … })   // LookupValue fields reject string prefills (TS2322)
+ *  ✓ useState<VeranstalterDialogDefaults | undefined>(undefined)
+ */
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Veranstalter, LookupValue } from '@/types/app';
 import { APP_IDS, LOOKUP_OPTIONS } from '@/types/app';
@@ -13,11 +27,17 @@ import type { ComputedContext } from '@/config/form-enhancements/types';
 import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
 import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/Veranstalter';
 import { AttachmentsSection } from '@/components/AttachmentsSection';
+import { t, appLabel, fieldLabel, lookupLabel, localeTag, CURRENCY } from '@/i18n';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { IconAlertCircle, IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode } from '@/lib/ai';
 import { lookupKey } from '@/lib/formatters';
+
+/** Widened prefill type for VeranstalterDialog.defaultValues — see file header. */
+export type VeranstalterDialogDefaults = Omit<Veranstalter['fields'], 'organisation_typ'> & {
+    organisation_typ?: LookupValue | string;
+  };
 
 interface VeranstalterDialogProps {
   open: boolean;
@@ -26,9 +46,7 @@ interface VeranstalterDialogProps {
   /** SHAPE-TOLERANT: lookup fields accept the bare key (string) or the
    *  LookupValue object; applookup fields the bare record id or the full
    *  record URL — the dialog normalizes both. */
-  defaultValues?: Omit<Veranstalter['fields'], 'organisation_typ'> & {
-    organisation_typ?: LookupValue | string;
-  };
+  defaultValues?: VeranstalterDialogDefaults;
   /** Record id when editing — enables the attachments section. Omit on create. */
   recordId?: string;
   enablePhotoScan?: boolean;
@@ -69,6 +87,12 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
       return true;
     }
   }, [fields, normalizedDefaults]);
+  const [showErrors, setShowErrors] = useState(false);
+  const REQUIRED_FIELDS = ['organisation_name', 'organisation_typ', 'ansprechpartner_vorname', 'ansprechpartner_nachname', 'email', 'strasse', 'hausnummer', 'plz', 'ort'] as const;
+  const missingRequired = REQUIRED_FIELDS.filter(k => {
+    const v = (fields as Record<string, unknown>)[k];
+    return v == null || v === '' || (Array.isArray(v) && v.length === 0);
+  });
   const [aiOpen, setAiOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
@@ -150,6 +174,10 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (missingRequired.length > 0) {
+      setShowErrors(true);
+      return;
+    }
     setSaving(true);
     setSubmitError(null);
     try {
@@ -171,7 +199,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
       await onSubmit(clean as Veranstalter['fields']);
       onClose();
     } catch (err) {
-      setSubmitError(err instanceof Error && err.message ? err.message : 'Speichern fehlgeschlagen.');
+      setSubmitError(err instanceof Error && err.message ? err.message : t('submit_error'));
     } finally {
       setSaving(false);
     }
@@ -235,7 +263,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
       setScanSuccess(true);
       setTimeout(() => setScanSuccess(false), 3000);
     } catch (err) {
-      console.error('Scan fehlgeschlagen:', err);
+      console.error(`${t('scan_error')}:`, err);
       alert(err instanceof Error ? err.message : String(err));
     } finally {
       setScanning(false);
@@ -270,91 +298,108 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
     }
   }, []);
 
-  const DIALOG_INTENT = defaultValues ? 'Veranstalter bearbeiten' : 'Veranstalter hinzufügen';
+  const DIALOG_INTENT = defaultValues
+    ? t('edit_entity', { entity: appLabel('veranstalter') })
+    : t('new_entity', { entity: appLabel('veranstalter') });
 
   const fieldBlocks: Record<string, React.ReactNode> = {
     'organisation_name': (
       <div key="organisation_name" className="space-y-1.5">
-        <Label htmlFor="organisation_name">Name der Organisation</Label>
+        <Label htmlFor="organisation_name">{fieldLabel('veranstalter', 'organisation_name')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="organisation_name"
           placeholder=""
           value={fields.organisation_name ?? ''}
           onChange={e => setFields(f => ({ ...f, organisation_name: e.target.value }))}
+          required
         />
+        {showErrors && !fields.organisation_name && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'organisation_typ': (
       <div key="organisation_typ" className="space-y-1.5">
-        <Label htmlFor="organisation_typ">Typ der Organisation</Label>
+        <Label htmlFor="organisation_typ">{fieldLabel('veranstalter', 'organisation_typ')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <div role="radiogroup" className="flex flex-wrap gap-1.5">
           <button
             type="button"
             role="radio"
             aria-checked={lookupKey(fields.organisation_typ) === 'verein'}
             onClick={() => setFields(f => ({ ...f, organisation_typ: (lookupKey(f.organisation_typ) === 'verein' ? undefined : 'verein') as any }))}
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
               lookupKey(fields.organisation_typ) === 'verein'
                 ? 'bg-foreground text-background border-foreground'
                 : 'bg-background text-foreground border-input hover:bg-accent'
             }`}
           >
-            Verein
+            {lookupLabel('veranstalter', 'organisation_typ', 'verein') ?? 'Verein'}
           </button>
           <button
             type="button"
             role="radio"
             aria-checked={lookupKey(fields.organisation_typ) === 'kommune'}
             onClick={() => setFields(f => ({ ...f, organisation_typ: (lookupKey(f.organisation_typ) === 'kommune' ? undefined : 'kommune') as any }))}
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
               lookupKey(fields.organisation_typ) === 'kommune'
                 ? 'bg-foreground text-background border-foreground'
                 : 'bg-background text-foreground border-input hover:bg-accent'
             }`}
           >
-            Kommune
+            {lookupLabel('veranstalter', 'organisation_typ', 'kommune') ?? 'Kommune'}
           </button>
           <button
             type="button"
             role="radio"
             aria-checked={lookupKey(fields.organisation_typ) === 'sonstige'}
             onClick={() => setFields(f => ({ ...f, organisation_typ: (lookupKey(f.organisation_typ) === 'sonstige' ? undefined : 'sonstige') as any }))}
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
               lookupKey(fields.organisation_typ) === 'sonstige'
                 ? 'bg-foreground text-background border-foreground'
                 : 'bg-background text-foreground border-input hover:bg-accent'
             }`}
           >
-            Sonstige Organisation
+            {lookupLabel('veranstalter', 'organisation_typ', 'sonstige') ?? 'Sonstige Organisation'}
           </button>
         </div>
+        {showErrors && !fields.organisation_typ && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'ansprechpartner_vorname': (
       <div key="ansprechpartner_vorname" className="space-y-1.5">
-        <Label htmlFor="ansprechpartner_vorname">Vorname Ansprechpartner</Label>
+        <Label htmlFor="ansprechpartner_vorname">{fieldLabel('veranstalter', 'ansprechpartner_vorname')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="ansprechpartner_vorname"
           placeholder=""
           value={fields.ansprechpartner_vorname ?? ''}
           onChange={e => setFields(f => ({ ...f, ansprechpartner_vorname: e.target.value }))}
+          required
         />
+        {showErrors && !fields.ansprechpartner_vorname && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'ansprechpartner_nachname': (
       <div key="ansprechpartner_nachname" className="space-y-1.5">
-        <Label htmlFor="ansprechpartner_nachname">Nachname Ansprechpartner</Label>
+        <Label htmlFor="ansprechpartner_nachname">{fieldLabel('veranstalter', 'ansprechpartner_nachname')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="ansprechpartner_nachname"
           placeholder=""
           value={fields.ansprechpartner_nachname ?? ''}
           onChange={e => setFields(f => ({ ...f, ansprechpartner_nachname: e.target.value }))}
+          required
         />
+        {showErrors && !fields.ansprechpartner_nachname && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'email': (
       <div key="email" className="space-y-1.5">
-        <Label htmlFor="email">E-Mail-Adresse</Label>
+        <Label htmlFor="email">{fieldLabel('veranstalter', 'email')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="email"
           type="email"
@@ -362,11 +407,14 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
           value={fields.email ?? ''}
           onChange={e => setFields(f => ({ ...f, email: e.target.value }))}
         />
+        {showErrors && !fields.email && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'telefon': (
       <div key="telefon" className="space-y-1.5">
-        <Label htmlFor="telefon">Telefonnummer</Label>
+        <Label htmlFor="telefon">{fieldLabel('veranstalter', 'telefon')}</Label>
         <Input
           id="telefon"
           value={fields.telefon ?? ''}
@@ -376,51 +424,67 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
     ),
     'strasse': (
       <div key="strasse" className="space-y-1.5">
-        <Label htmlFor="strasse">Straße</Label>
+        <Label htmlFor="strasse">{fieldLabel('veranstalter', 'strasse')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="strasse"
           placeholder=""
           value={fields.strasse ?? ''}
           onChange={e => setFields(f => ({ ...f, strasse: e.target.value }))}
+          required
         />
+        {showErrors && !fields.strasse && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'hausnummer': (
       <div key="hausnummer" className="space-y-1.5">
-        <Label htmlFor="hausnummer">Hausnummer</Label>
+        <Label htmlFor="hausnummer">{fieldLabel('veranstalter', 'hausnummer')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="hausnummer"
           placeholder=""
           value={fields.hausnummer ?? ''}
           onChange={e => setFields(f => ({ ...f, hausnummer: e.target.value }))}
+          required
         />
+        {showErrors && !fields.hausnummer && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'plz': (
       <div key="plz" className="space-y-1.5">
-        <Label htmlFor="plz">Postleitzahl</Label>
+        <Label htmlFor="plz">{fieldLabel('veranstalter', 'plz')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="plz"
           placeholder=""
           value={fields.plz ?? ''}
           onChange={e => setFields(f => ({ ...f, plz: e.target.value }))}
+          required
         />
+        {showErrors && !fields.plz && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'ort': (
       <div key="ort" className="space-y-1.5">
-        <Label htmlFor="ort">Ort</Label>
+        <Label htmlFor="ort">{fieldLabel('veranstalter', 'ort')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="ort"
           placeholder=""
           value={fields.ort ?? ''}
           onChange={e => setFields(f => ({ ...f, ort: e.target.value }))}
+          required
         />
+        {showErrors && !fields.ort && (
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
+        )}
       </div>
     ),
     'website': (
       <div key="website" className="space-y-1.5">
-        <Label htmlFor="website">Website</Label>
+        <Label htmlFor="website">{fieldLabel('veranstalter', 'website')}</Label>
         <Input
           id="website"
           value={fields.website ?? ''}
@@ -430,7 +494,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
     ),
     'beschreibung': (
       <div key="beschreibung" className="space-y-1.5">
-        <Label htmlFor="beschreibung">Beschreibung der Organisation</Label>
+        <Label htmlFor="beschreibung">{fieldLabel('veranstalter', 'beschreibung')}</Label>
         <Textarea
           id="beschreibung"
           placeholder=""
@@ -509,15 +573,15 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
     // Backend-Feld mit €-Label ODER virtueller Computed-Key, dessen Name nach Geld aussieht.
     const looksLikeCurrency = CURRENCY_KEYS.has(k) || /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k);
     if (looksLikeCurrency) {
-      return n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return n.toLocaleString(localeTag(), { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+    return n.toLocaleString(localeTag(), { maximumFractionDigits: 2 });
   }
 
   return (
     <>
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0">
+      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0 max-sm:[&>button]:size-10 max-sm:[&>button]:grid max-sm:[&>button]:place-items-center max-sm:[&>button]:rounded-full max-sm:[&>button]:border max-sm:[&>button]:border-input max-sm:[&>button]:bg-background max-sm:[&>button]:opacity-100 max-sm:[&>button>svg]:size-5">
         <DialogHeader className="px-6 pt-5 pb-3 border-b flex flex-row items-center gap-3 space-y-0">
           <DialogTitle className="flex-1 truncate text-left">{DIALOG_INTENT}</DialogTitle>
           {enablePhotoScan && (
@@ -526,21 +590,21 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
               onClick={() => setAiOpen(o => !o)}
               aria-expanded={aiOpen}
               aria-controls="ai-fill-panel"
-              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all mr-7 shadow-sm ${
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 max-sm:py-2.5 max-sm:px-4 text-xs font-semibold transition-all mr-7 max-sm:mr-12 shadow-sm ${
                 aiOpen
                   ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
                   : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 hover:border-primary/50'
               }`}
             >
               <IconSparkles className={`h-3.5 w-3.5 ${aiOpen ? '' : 'text-primary'}`} />
-              <span className="hidden sm:inline">KI-Ausfüllen</span>
+              <span className="hidden sm:inline">{t('smart_fill')}</span>
               <IconChevronDown className={`h-3 w-3 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
             </button>
           )}
         </DialogHeader>
         {enablePhotoScan && aiOpen && (
           <div id="ai-fill-panel" className="border-b bg-muted/20 px-6 py-4 space-y-3">
-            <p className="text-xs text-muted-foreground">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
+            <p className="text-xs text-muted-foreground">{t('scan_header_sub')}</p>
             <div className="flex items-start gap-2 pl-0.5">
               <Checkbox
                 id="ai-use-personal-info"
@@ -550,21 +614,21 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
               />
               <span className="text-xs text-muted-foreground leading-snug">
                 <Label htmlFor="ai-use-personal-info" className="text-xs font-normal text-muted-foreground cursor-pointer inline">
-                  KI-Assistent darf zusätzlich Informationen zu meiner Person verwenden
+                  {t('useinfo_label')}
                 </Label>
                 {' '}
                 <button type="button" onClick={handleShowProfileInfo} className="text-xs text-primary hover:underline whitespace-nowrap">
-                  {profileLoading ? 'Lade...' : '(mehr Infos)'}
+                  {profileLoading ? t('useinfo_loading') : `(${t('useinfo_more')})`}
                 </button>
               </span>
             </div>
             {showProfileInfo && (
               <div className="rounded-md border bg-muted/50 p-2 text-xs max-h-40 overflow-y-auto">
-                <p className="font-medium mb-1">Folgende Infos über dich können von der KI genutzt werden:</p>
+                <p className="font-medium mb-1">{t('profile_preamble')}</p>
                 {profileData ? Object.values(profileData).map((v, i) => (
                   <span key={i}>{i > 0 && ", "}{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
                 )) : (
-                  <span className="text-muted-foreground">Profil konnte nicht geladen werden</span>
+                  <span className="text-muted-foreground">{t('useinfo_error')}</span>
                 )}
               </div>
             )}
@@ -595,8 +659,8 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
                     <IconLoader2 className="h-7 w-7 text-primary animate-spin" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium">KI analysiert...</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Felder werden automatisch ausgefüllt</p>
+                    <p className="text-sm font-medium">{t('scan_analyzing')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('scan_analyzing_sub')}</p>
                   </div>
                 </div>
               ) : scanSuccess ? (
@@ -605,8 +669,8 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
                     <IconCircleCheck className="h-7 w-7 text-green-600 dark:text-green-400" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">Felder ausgefüllt!</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Prüfe die Werte und passe sie ggf. an</p>
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">{t('scan_success')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('scan_success_sub')}</p>
                   </div>
                 </div>
               ) : (
@@ -615,7 +679,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
                     <IconPhotoPlus className="h-7 w-7 text-primary/70" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium">Foto oder Dokument hierher ziehen oder auswählen</p>
+                    <p className="text-sm font-medium">{t('scan_upload')}</p>
                   </div>
                 </div>
               )}
@@ -639,11 +703,11 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
             <div className="grid grid-cols-3 gap-2">
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => { e.stopPropagation(); cameraInputRef.current?.click(); }}>
-                <IconCamera className="h-3.5 w-3.5 mr-1" />Kamera
+                <IconCamera className="h-3.5 w-3.5 mr-1" />{t('scan_camera_btn')}
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}>
-                <IconUpload className="h-3.5 w-3.5 mr-1" />Foto wählen
+                <IconUpload className="h-3.5 w-3.5 mr-1" />{t('scan_file_btn')}
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => {
@@ -654,13 +718,13 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
                     setTimeout(() => { if (fileInputRef.current) fileInputRef.current.accept = 'image/*,application/pdf'; }, 100);
                   }
                 }}>
-                <IconFileText className="h-3.5 w-3.5 mr-1" />Dokument
+                <IconFileText className="h-3.5 w-3.5 mr-1" />{t('scan_doc_btn')}
               </Button>
             </div>
 
             <div className="relative">
               <Textarea
-                placeholder="Text eingeben oder einfügen, z.B. Notizen, E-Mails, Beschreibungen..."
+                placeholder={t('scan_text_placeholder')}
                 value={aiText}
                 onChange={e => {
                   setAiText(e.target.value);
@@ -688,7 +752,7 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
                     if (text) setAiText(prev => prev ? prev + '\n' + text : text);
                   } catch {}
                 }}
-                title="Paste"
+                title={t('paste')}
               >
                 <IconClipboard className="h-4 w-4" />
               </button>
@@ -702,13 +766,13 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
                 disabled={scanning}
                 onClick={() => handleAiExtract()}
               >
-                <IconSparkles className="h-3.5 w-3.5 mr-1.5" />Analysieren
+                <IconSparkles className="h-3.5 w-3.5 mr-1.5" />{t('scan_text_analyze')}
               </Button>
             )}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0">
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0 max-sm:[&_input]:h-11">
           <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 min-w-0">
             {(() => {
               const renderField = (k: string) => {
@@ -794,6 +858,12 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
                 })()}
               </div>
             )}
+            {showErrors && missingRequired.length > 0 && (
+              <p className="text-xs text-destructive flex items-center gap-1.5" role="alert">
+                <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {t('missing_required')}
+              </p>
+            )}
             {recordId && (
               <div className="pt-2 border-t border-border">
                 <AttachmentsSection appId={APP_IDS.VERANSTALTER} recordId={recordId} />
@@ -806,13 +876,14 @@ export function VeranstalterDialog({ open, onClose, onSubmit, defaultValues, rec
               <span className="min-w-0 break-words">{submitError}</span>
             </div>
           )}
-          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
+          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2 max-sm:flex-row">
+            <Button type="button" variant="outline" onClick={onClose} className="max-sm:h-12 max-sm:flex-1 max-sm:text-base">{t('cancel')}</Button>
             <Button
               type="submit"
-              disabled={saving || !isDirty}
+              className="max-sm:h-12 max-sm:flex-1 max-sm:text-base"
+              disabled={saving || !isDirty || (showErrors && missingRequired.length > 0)}
             >
-              {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
+              {saving ? t('saving') : defaultValues ? t('save') : t('create')}
             </Button>
           </DialogFooter>
         </form>

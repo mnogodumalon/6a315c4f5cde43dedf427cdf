@@ -1,7 +1,24 @@
 /**
  * widgets/primitives.ts — shared widget MECHANICS (Tier 3 / M4).
  *
- * @version 1.6.0
+ * @version 1.8.0
+ * @since 2026-07-06  (1.8.0: QUANTITY-AXIS SHARED MECHANICS — `TONE_TEXT`
+ *                     (text-color classes so an SVG mark inherits its tone via
+ *                     currentColor; the closed palette stays the ONE source of
+ *                     chart color) and `labelOf`/`scalarOf` LIFTED from
+ *                     TableWidget verbatim (one raw-value normalizer for the
+ *                     family — TableWidget sort/search and ChartWidget
+ *                     aggregation read the SAME scalar; behavior unchanged).
+ * @since 2026-06-25  (1.7.0: family callback `OnMapPointClick` — the geo
+ *                     analog of OnAddCard/OnEmptyClick for MapWidget's optional
+ *                     "tap an empty point → create" affordance. An OBJECT
+ *                     `{ lat, long }`, never two positional numbers (both are
+ *                     numbers → silently swappable), and `long` not `lng` (the
+ *                     GeoLocation field name). Documentary anchor only; the
+ *                     widget spells the signature inline, like the time widgets
+ *                     do for onEmptyClick. No mechanics — MapWidget copies the
+ *                     Leaflet load pattern from GeoMapPicker (sister widgets
+ *                     never import each other) and owns its own map geometry.)
  * @since 2026-06-11  (1.6.0: DRAG PROXY (Bryntum DragHelper pattern) — a
  *                     compact stand-in of the grabbed item follows the
  *                     pointer (mouse: trailing the cursor; touch: floating
@@ -87,12 +104,47 @@ export type OnRangeCreate = (start: Date, end: Date, group?: string) => void;
  *  THIS type instead of faking a date. */
 export type OnAddCard = (column: string) => void;
 
+/** "Empty point on the map tapped" (MapWidget's optional create affordance):
+ *  the geographic coordinate, so the consumer opens a prefilled create dialog.
+ *  An OBJECT, never two positional numbers — `(lat, long)` is silently
+ *  swappable (both are numbers); `{ lat, long }` makes a transposed mapping a
+ *  compile error. `long`, never `lng` (the Living-Apps GeoLocation field name).
+ *  MapWidget spells the signature inline in its props (like the time widgets do
+ *  for onEmptyClick); this is the shared documentary anchor. */
+export type OnMapPointClick = (point: { lat: number; long: number }) => void;
+
 /** Return type of every WRITE-GESTURE callback (drop / resize / card move):
  *  return nothing = accepted; return a STRING (sync or via Promise) = the
  *  gesture is REJECTED and the widget shows the string in its built-in
  *  rejection notice (the snap-back already happened — this gives it a voice).
  *  Rule logic and message text live in the CONSUMER; the widget only displays. */
 export type WriteResult = void | string | Promise<void | string>;
+
+// ── raw-value normalization ──────────────────────────────────────────────
+// The ONE scalar behind a Living-Apps raw value. ChartWidget aggregation (and
+// every family consumer) reads it — one normalizer, one truth. Total and
+// defensive: never throws, never yields "[object Object]".
+
+export function labelOf(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'object' && 'label' in (v as Record<string, unknown>)) {
+    return String((v as { label?: unknown }).label ?? '');
+  }
+  if (typeof v === 'object') return '';   // unknown object (malformed lookup) → never "[object Object]"
+  return String(v);
+}
+
+/** The comparable/searchable scalar behind a raw value: numbers stay numbers,
+ *  lookups unwrap to their label, arrays join their labels. */
+export function scalarOf(value: unknown): string | number {
+  if (value == null) return '';
+  if (typeof value === 'number') return value;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(labelOf).join(', ');
+  if (typeof value === 'object' && 'label' in (value as Record<string, unknown>)) return labelOf(value);
+  return '';   // unknown shape → not "[object Object]"
+}
 
 // ── TimeSpan + date helpers (timezone-safe — always local, never UTC) ───
 
@@ -249,6 +301,16 @@ export const TONE_ACCENT: Record<WidgetTone, string> = {
   success: 'border-l-emerald-500 bg-emerald-500/5',
   warning: 'border-l-amber-500 bg-amber-500/5',
   destructive: 'border-l-destructive bg-destructive/5',
+};
+/** Text-color per tone — an SVG mark painted with `currentColor` inherits its
+ *  tone from this class on a wrapper. Chart marks, sparkline strokes: color is
+ *  defined ONCE here, theme-aware, palette-closed (never a free hex). */
+export const TONE_TEXT: Record<WidgetTone, string> = {
+  default: 'text-muted-foreground',
+  primary: 'text-primary',
+  success: 'text-emerald-600',
+  warning: 'text-amber-600',
+  destructive: 'text-destructive',
 };
 
 // ── Drag&Drop core (Pointer Events — no library; window FSM) ────────────

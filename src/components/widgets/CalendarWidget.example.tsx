@@ -20,7 +20,7 @@
  * interface `Zimmer`, `APP_IDS.ZIMMER`, method `getZimmer()`.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { de } from 'date-fns/locale';
+import { dateFnsLocale } from '@/i18n';
 import { format, parseISO, isBefore, startOfToday } from 'date-fns';
 import { LivingAppsService, extractRecordId } from '@/services/livingAppsService';
 import type { Buchung, Zimmer } from '@/types/app';
@@ -149,7 +149,7 @@ export function HotelCalendarExample() {
         events={events}
         view={cal.view}
         referenceDate={cal.cursor}
-        locale={de}
+        locale={dateFnsLocale()}  // runtime locale — never pin date-fns `de` here
         onViewChange={cal.setView}
         onCursorChange={cal.setCursor}
         onRangeChange={(from, to) => {
@@ -161,7 +161,11 @@ export function HotelCalendarExample() {
         // Drag-to-create: drag across empty month cells → day range (end day
         // INCLUSIVE, like an all-day event). The args are DATES (like
         // onEmptyClick) — NOT ISO strings like onEventDrop — so format them
-        // onto the field type yourself before writing.
+        // onto the FIELD TYPE yourself before writing. anreise/abreise are
+        // date-ONLY fields (date/date) → 'yyyy-MM-dd'. For a DATETIME field
+        // (date/datetimeminute, e.g. an appointment WITH a clock time) you MUST
+        // preserve the time: format(start, "yyyy-MM-dd'T'HH:mm") — using
+        // 'yyyy-MM-dd' there pins every new record to 00:00.
         onRangeCreate={(start, end) => {
           void LivingAppsService.createBuchungEntry({
             gast: 'Neue Buchung',
@@ -171,7 +175,11 @@ export function HotelCalendarExample() {
         }}
         onEmptyClick={date => {
           // Empty-slot tap. `group` (2nd arg) is ALWAYS undefined here — the
-          // calendar has no second axis. Drill into the day instead of booking.
+          // calendar has no second axis. This fixture drills into the day; a
+          // time-bearing app would CREATE here instead, preserving the clicked
+          // time (week/day view gives the clock time in `date`):
+          //   openCreate({ start: format(date, "yyyy-MM-dd'T'HH:mm") })  // datetime field
+          //   openCreate({ start: format(date, 'yyyy-MM-dd') })          // date-only field
           cal.setCursor(date);
           cal.setView('day');
         }}

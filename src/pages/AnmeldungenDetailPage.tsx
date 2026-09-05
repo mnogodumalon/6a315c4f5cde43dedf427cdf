@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
 import { formEnhancements } from '@/config/form-enhancements/Anmeldungen';
 import { evalComputed } from '@/config/form-enhancements/types';
+import { t, appLabel, fieldLabel, localeTag, CURRENCY } from '@/i18n';
 
 export default function AnmeldungenDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,11 +68,11 @@ export default function AnmeldungenDetailPage() {
   if (!record) {
     return (
       <RecordViewEmpty
-        title="Eintrag nicht gefunden"
+        title={t('not_found')}
         action={
           <Button variant="ghost" onClick={() => navigate('/anmeldungen')}>
             <IconArrowLeft className="h-4 w-4 mr-1.5" />
-            Zurück
+            {t('back')}
           </Button>
         }
       />
@@ -82,10 +83,10 @@ export default function AnmeldungenDetailPage() {
     <RecordView
       onBack={() => navigate('/anmeldungen')}
       onEdit={() => setEditing(true)}
-      backLabel="Zurück"
-      editLabel="Bearbeiten"
+      backLabel={t('back')}
+      editLabel={t('edit_button')}
     >
-      <RecordHeader title={record.fields.vorname ?? 'Anmeldungen'} />
+      <RecordHeader title={record.fields.vorname ?? appLabel('anmeldungen')} />
 
       {(() => {
         const lookupLists: Record<string, unknown> = {
@@ -93,8 +94,8 @@ export default function AnmeldungenDetailPage() {
         };
         const fmtComputed = (k: string, n: number) =>
           /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k)
-            ? n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-            : n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+            ? n.toLocaleString(localeTag(), { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : n.toLocaleString(localeTag(), { maximumFractionDigits: 2 });
         const computedFacts = Object.entries(formEnhancements.computed)
           .map(([key, formula]) => {
             const v = evalComputed(formula, record!.fields as Record<string, unknown>, { lookupLists });
@@ -106,15 +107,15 @@ export default function AnmeldungenDetailPage() {
         return computedFacts.length > 0 ? <RecordKeyFacts items={computedFacts} /> : null;
       })()}
 
-      <RecordSection title="Details" cols={2}>
-        <RecordField label="Veranstaltung" value={getVeranstaltungenDisplayName(record.fields.veranstaltung)} format="text" />
-        <RecordField label="Vorname" value={record.fields.vorname} format="text" />
-        <RecordField label="Nachname" value={record.fields.nachname} format="text" />
-        <RecordField label="E-Mail-Adresse" value={record.fields.email_anmeldung} format="email" />
-        <RecordField label="Telefonnummer (optional)" value={record.fields.telefon_anmeldung} format="text" />
-        <RecordField label="Anzahl der Personen" value={record.fields.anzahl_personen} format="text" />
-        <RecordField label="Anmerkungen" value={record.fields.anmerkungen} format="longtext" className="md:col-span-2" />
-        <RecordField label="Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden." value={record.fields.email_benachrichtigung} format="bool" />
+      <RecordSection title={t('details')} cols={2}>
+        <RecordField label={fieldLabel('anmeldungen', 'veranstaltung')} value={getVeranstaltungenDisplayName(record.fields.veranstaltung)} format="text" />
+        <RecordField label={fieldLabel('anmeldungen', 'vorname')} value={record.fields.vorname} format="text" />
+        <RecordField label={fieldLabel('anmeldungen', 'nachname')} value={record.fields.nachname} format="text" />
+        <RecordField label={fieldLabel('anmeldungen', 'email_anmeldung')} value={record.fields.email_anmeldung} format="email" />
+        <RecordField label={fieldLabel('anmeldungen', 'telefon_anmeldung')} value={record.fields.telefon_anmeldung} format="text" />
+        <RecordField label={fieldLabel('anmeldungen', 'anzahl_personen')} value={record.fields.anzahl_personen} format="text" />
+        <RecordField label={fieldLabel('anmeldungen', 'anmerkungen')} value={record.fields.anmerkungen} format="longtext" className="md:col-span-2" />
+        <RecordField label={fieldLabel('anmeldungen', 'email_benachrichtigung')} value={record.fields.email_benachrichtigung} format="bool" />
       </RecordSection>
 
       <RecordAttachments appId={APP_IDS.ANMELDUNGEN} recordId={record.record_id} />
@@ -122,7 +123,7 @@ export default function AnmeldungenDetailPage() {
       <div className="flex justify-end pt-2">
         <Button variant="ghost" onClick={() => setDeleteOpen(true)} className="text-destructive hover:text-destructive">
           <IconTrash className="h-4 w-4 mr-1.5" />
-          Löschen
+          {t('delete')}
         </Button>
       </div>
 
@@ -141,8 +142,8 @@ export default function AnmeldungenDetailPage() {
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onConfirm={handleDelete}
-        title="Anmeldungen löschen"
-        description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
+        title={t('delete_entity', { entity: appLabel('anmeldungen') })}
+        description={t('confirm_delete_desc')}
       />
     </RecordView>
   );

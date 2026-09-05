@@ -1,13 +1,13 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useDashboardData } from '@/hooks/useDashboardData';
-import type { Veranstaltungen, Anmeldungen, Veranstalter } from '@/types/app';
+import type { Veranstaltungen, Veranstalter, Anmeldungen } from '@/types/app';
 import { LivingAppsService, extractRecordId, cleanFieldsForApi } from '@/services/livingAppsService';
 import { VeranstaltungenDialog } from '@/components/dialogs/VeranstaltungenDialog';
 import { VeranstaltungenViewDialog } from '@/components/dialogs/VeranstaltungenViewDialog';
-import { AnmeldungenDialog } from '@/components/dialogs/AnmeldungenDialog';
-import { AnmeldungenViewDialog } from '@/components/dialogs/AnmeldungenViewDialog';
 import { VeranstalterDialog } from '@/components/dialogs/VeranstalterDialog';
 import { VeranstalterViewDialog } from '@/components/dialogs/VeranstalterViewDialog';
+import { AnmeldungenDialog } from '@/components/dialogs/AnmeldungenDialog';
+import { AnmeldungenViewDialog } from '@/components/dialogs/AnmeldungenViewDialog';
 import { BulkEditDialog } from '@/components/dialogs/BulkEditDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
@@ -25,15 +25,17 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { IconPencil, IconTrash, IconPlus, IconFilter, IconX, IconArrowsUpDown, IconArrowUp, IconArrowDown, IconSearch, IconCopy, IconFileText } from '@tabler/icons-react';
+import { t, appLabel, fieldLabels, lookupLabel, dateFnsLocale, dateFormat } from '@/i18n';
 import { format, parseISO } from 'date-fns';
-import { de } from 'date-fns/locale';
 
 function fmtDate(d?: string) {
   if (!d) return '—';
-  try { return format(parseISO(d), 'dd.MM.yyyy', { locale: de }); } catch { return d; }
+  try { return format(parseISO(d), dateFormat(), { locale: dateFnsLocale() }); } catch { return d; }
 }
 
-// Field metadata per entity for bulk edit and column filters
+// Field metadata per entity for bulk edit and column filters. `label` is the
+// BUILD-language fallback only — getFieldMeta() re-labels every entry (and every
+// lookup option) through the runtime catalog before anything renders it.
 const VERANSTALTUNGEN_FIELDS = [
   { key: 'veranstalter', label: 'Veranstalter (E-Mail-Adresse)', type: 'applookup/select', targetEntity: 'veranstalter', targetAppId: 'VERANSTALTER', displayField: 'organisation_name' },
   { key: 'titel', label: 'Titel der Veranstaltung', type: 'string/text' },
@@ -52,16 +54,6 @@ const VERANSTALTUNGEN_FIELDS = [
   { key: 'kosten', label: 'Kosten / Eintritt', type: 'string/text' },
   { key: 'flyer', label: 'Bild / Flyer', type: 'file' },
 ];
-const ANMELDUNGEN_FIELDS = [
-  { key: 'veranstaltung', label: 'Veranstaltung', type: 'applookup/select', targetEntity: 'veranstaltungen', targetAppId: 'VERANSTALTUNGEN', displayField: 'titel' },
-  { key: 'vorname', label: 'Vorname', type: 'string/text' },
-  { key: 'nachname', label: 'Nachname', type: 'string/text' },
-  { key: 'email_anmeldung', label: 'E-Mail-Adresse', type: 'string/email' },
-  { key: 'telefon_anmeldung', label: 'Telefonnummer (optional)', type: 'string/tel' },
-  { key: 'anzahl_personen', label: 'Anzahl der Personen', type: 'number' },
-  { key: 'anmerkungen', label: 'Anmerkungen', type: 'string/textarea' },
-  { key: 'email_benachrichtigung', label: 'Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden.', type: 'bool' },
-];
 const VERANSTALTER_FIELDS = [
   { key: 'organisation_name', label: 'Name der Organisation', type: 'string/text' },
   { key: 'organisation_typ', label: 'Typ der Organisation', type: 'lookup/radio', options: [{ key: 'verein', label: 'Verein' }, { key: 'kommune', label: 'Kommune' }, { key: 'sonstige', label: 'Sonstige Organisation' }] },
@@ -76,11 +68,21 @@ const VERANSTALTER_FIELDS = [
   { key: 'website', label: 'Website', type: 'string/url' },
   { key: 'beschreibung', label: 'Beschreibung der Organisation', type: 'string/textarea' },
 ];
+const ANMELDUNGEN_FIELDS = [
+  { key: 'veranstaltung', label: 'Veranstaltung', type: 'applookup/select', targetEntity: 'veranstaltungen', targetAppId: 'VERANSTALTUNGEN', displayField: 'titel' },
+  { key: 'vorname', label: 'Vorname', type: 'string/text' },
+  { key: 'nachname', label: 'Nachname', type: 'string/text' },
+  { key: 'email_anmeldung', label: 'E-Mail-Adresse', type: 'string/email' },
+  { key: 'telefon_anmeldung', label: 'Telefonnummer (optional)', type: 'string/tel' },
+  { key: 'anzahl_personen', label: 'Anzahl der Personen', type: 'number' },
+  { key: 'anmerkungen', label: 'Anmerkungen', type: 'string/textarea' },
+  { key: 'email_benachrichtigung', label: 'Ich möchte per E-Mail über Änderungen zur Veranstaltung informiert werden.', type: 'bool' },
+];
 
 const ENTITY_TABS = [
-  { key: 'veranstaltungen', label: 'Veranstaltungen', pascal: 'Veranstaltungen' },
-  { key: 'anmeldungen', label: 'Anmeldungen', pascal: 'Anmeldungen' },
-  { key: 'veranstalter', label: 'Veranstalter', pascal: 'Veranstalter' },
+  { key: 'veranstaltungen', pascal: 'Veranstaltungen' },
+  { key: 'veranstalter', pascal: 'Veranstalter' },
+  { key: 'anmeldungen', pascal: 'Anmeldungen' },
 ] as const;
 
 type EntityKey = typeof ENTITY_TABS[number]['key'];
@@ -92,13 +94,13 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<EntityKey>('veranstaltungen');
   const [selectedIds, setSelectedIds] = useState<Record<EntityKey, Set<string>>>(() => ({
     'veranstaltungen': new Set(),
-    'anmeldungen': new Set(),
     'veranstalter': new Set(),
+    'anmeldungen': new Set(),
   }));
   const [filters, setFilters] = useState<Record<EntityKey, Record<string, string>>>(() => ({
     'veranstaltungen': {},
-    'anmeldungen': {},
     'veranstalter': {},
+    'anmeldungen': {},
   }));
   const [showFilters, setShowFilters] = useState(false);
   const [dialogState, setDialogState] = useState<{ entity: EntityKey; record: any } | null>(null);
@@ -114,8 +116,8 @@ export default function AdminPage() {
   const getRecords = useCallback((entity: EntityKey) => {
     switch (entity) {
       case 'veranstaltungen': return (data as any).veranstaltungen as Veranstaltungen[] ?? [];
-      case 'anmeldungen': return (data as any).anmeldungen as Anmeldungen[] ?? [];
       case 'veranstalter': return (data as any).veranstalter as Veranstalter[] ?? [];
+      case 'anmeldungen': return (data as any).anmeldungen as Anmeldungen[] ?? [];
       default: return [];
     }
   }, [data]);
@@ -150,13 +152,26 @@ export default function AdminPage() {
     return String(url);
   }, [getLookupLists]);
 
+  // An EntityKey IS the app key, so the runtime catalog can re-label the static
+  // field metadata on every render (the tree remounts on a language switch).
+  // Only display labels change here — keys, types and option keys stay as built.
   const getFieldMeta = useCallback((entity: EntityKey) => {
-    switch (entity) {
-      case 'veranstaltungen': return VERANSTALTUNGEN_FIELDS;
-      case 'anmeldungen': return ANMELDUNGEN_FIELDS;
-      case 'veranstalter': return VERANSTALTER_FIELDS;
-      default: return [];
-    }
+    const raw: any[] = (() => {
+      switch (entity) {
+        case 'veranstaltungen': return VERANSTALTUNGEN_FIELDS as any[];
+        case 'veranstalter': return VERANSTALTER_FIELDS as any[];
+        case 'anmeldungen': return ANMELDUNGEN_FIELDS as any[];
+        default: return [];
+      }
+    })();
+    const labels = fieldLabels(entity);
+    return raw.map((f: any) => ({
+      ...f,
+      label: labels[f.key] ?? f.label,
+      ...(f.options
+        ? { options: f.options.map((o: any) => ({ ...o, label: lookupLabel(entity, f.key, o.key) ?? o.label })) }
+        : {}),
+    }));
   }, []);
 
   const getFilteredRecords = useCallback((entity: EntityKey) => {
@@ -183,12 +198,14 @@ export default function AdminPage() {
           return true;
         }
         if (fm.type === 'lookup/select' || fm.type === 'lookup/radio') {
-          const label = val && typeof val === 'object' && 'label' in val ? val.label : '';
-          return String(label).toLowerCase().includes(fv.toLowerCase());
+          // The filter select carries the option KEY, which is locale-independent —
+          // the record's own label is in the build language and must not be matched.
+          const key = val && typeof val === 'object' && 'key' in val ? val.key : '';
+          return String(key) === fv;
         }
         if (fm.type.includes('multiplelookup')) {
           if (!Array.isArray(val)) return false;
-          return val.some((item: any) => String(item?.label ?? '').toLowerCase().includes(fv.toLowerCase()));
+          return val.some((item: any) => String(lookupLabel(entity, fm.key, item?.key) ?? item?.label ?? '').toLowerCase().includes(fv.toLowerCase()));
         }
         if (fm.type.includes('applookup')) {
           const display = getApplookupDisplay(entity, fm.key, val);
@@ -254,15 +271,15 @@ export default function AdminPage() {
         update: (id: string, fields: any) => LivingAppsService.updateVeranstaltungenEntry(id, fields),
         remove: (id: string) => LivingAppsService.deleteVeranstaltungenEntry(id),
       };
-      case 'anmeldungen': return {
-        create: (fields: any) => LivingAppsService.createAnmeldungenEntry(fields),
-        update: (id: string, fields: any) => LivingAppsService.updateAnmeldungenEntry(id, fields),
-        remove: (id: string) => LivingAppsService.deleteAnmeldungenEntry(id),
-      };
       case 'veranstalter': return {
         create: (fields: any) => LivingAppsService.createVeranstalterEntry(fields),
         update: (id: string, fields: any) => LivingAppsService.updateVeranstalterEntry(id, fields),
         remove: (id: string) => LivingAppsService.deleteVeranstalterEntry(id),
+      };
+      case 'anmeldungen': return {
+        create: (fields: any) => LivingAppsService.createAnmeldungenEntry(fields),
+        update: (id: string, fields: any) => LivingAppsService.updateAnmeldungenEntry(id, fields),
+        remove: (id: string) => LivingAppsService.deleteAnmeldungenEntry(id),
       };
       default: return null;
     }
@@ -368,7 +385,7 @@ export default function AdminPage() {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4">
         <p className="text-destructive">{error.message}</p>
-        <Button onClick={fetchAll}>Erneut versuchen</Button>
+        <Button onClick={fetchAll}>{t('retry')}</Button>
       </div>
     );
   }
@@ -380,11 +397,11 @@ export default function AdminPage() {
 
   return (
     <PageShell
-      title="Verwaltung"
-      subtitle="Alle Daten verwalten"
+      title={t('admin')}
+      subtitle={t('admin_subtitle')}
       action={
         <Button onClick={() => setCreateEntity(activeTab)} className="shrink-0">
-          <IconPlus className="h-4 w-4 mr-2" /> Hinzufügen
+          <IconPlus className="h-4 w-4 mr-2" /> {t('add')}
         </Button>
       }
     >
@@ -401,7 +418,7 @@ export default function AdminPage() {
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
-              {tab.label}
+              {appLabel(tab.key)}
               <Badge variant="secondary" className="ml-1 text-xs">{count}</Badge>
             </button>
           );
@@ -413,7 +430,7 @@ export default function AdminPage() {
           <div className="relative w-full max-w-sm">
             <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Suchen..."
+              placeholder={t('search')}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-9 h-9"
@@ -421,31 +438,31 @@ export default function AdminPage() {
           </div>
           <Button variant="outline" size="sm" onClick={() => setShowFilters(f => !f)} className="gap-2">
             <IconFilter className="h-4 w-4" />
-            Filtern
+            {t('filter')}
             {activeFilterCount > 0 && (
               <Badge variant="secondary" className="ml-1">{activeFilterCount}</Badge>
             )}
           </Button>
           {activeFilterCount > 0 && (
             <Button variant="ghost" size="sm" onClick={() => clearEntityFilters(activeTab)}>
-              Filter zurücksetzen
+              {t('clear_filters')}
             </Button>
           )}
         </div>
         {sel.size > 0 && (
           <div className="flex items-center gap-2 flex-wrap bg-muted/60 rounded-lg px-3 py-1.5">
-            <span className="text-sm font-medium">{sel.size} ausgewählt</span>
+            <span className="text-sm font-medium">{sel.size} {t('selected')}</span>
             <Button variant="outline" size="sm" onClick={() => setBulkEditOpen(activeTab)}>
-              <IconPencil className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Feld bearbeiten</span>
+              <IconPencil className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">{t('bulk_edit')}</span>
             </Button>
             <Button variant="outline" size="sm" onClick={() => handleBulkClone()}>
-              <IconCopy className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Kopieren</span>
+              <IconCopy className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">{t('bulk_clone')}</span>
             </Button>
             <Button variant="destructive" size="sm" onClick={() => setDeleteTargets({ entity: activeTab, ids: Array.from(sel) })}>
-              <IconTrash className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Ausgewählte löschen</span>
+              <IconTrash className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">{t('bulk_delete')}</span>
             </Button>
             <Button variant="ghost" size="sm" onClick={() => clearSelection(activeTab)}>
-              <IconX className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Auswahl aufheben</span>
+              <IconX className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">{t('deselect_all')}</span>
             </Button>
           </div>
         )}
@@ -458,27 +475,27 @@ export default function AdminPage() {
               <label className="text-xs font-medium text-muted-foreground">{fm.label}</label>
               {fm.type === 'bool' ? (
                 <Select value={filters[activeTab]?.[fm.key] ?? ''} onValueChange={v => updateFilter(activeTab, fm.key, v === 'all' ? '' : v)}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Alle" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={t('all_values')} /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Alle</SelectItem>
-                    <SelectItem value="true">Ja</SelectItem>
-                    <SelectItem value="false">Nein</SelectItem>
+                    <SelectItem value="all">{t('all_values')}</SelectItem>
+                    <SelectItem value="true">{t('yes')}</SelectItem>
+                    <SelectItem value="false">{t('no')}</SelectItem>
                   </SelectContent>
                 </Select>
               ) : fm.type === 'lookup/select' || fm.type === 'lookup/radio' ? (
                 <Select value={filters[activeTab]?.[fm.key] ?? ''} onValueChange={v => updateFilter(activeTab, fm.key, v === 'all' ? '' : v)}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Alle" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={t('all_values')} /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Alle</SelectItem>
+                    <SelectItem value="all">{t('all_values')}</SelectItem>
                     {fm.options?.map((o: any) => (
-                      <SelectItem key={o.key} value={o.label}>{o.label}</SelectItem>
+                      <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
                 <Input
                   className="h-8 text-xs"
-                  placeholder="Filtern..."
+                  placeholder={`${t('filter')}...`}
                   value={filters[activeTab]?.[fm.key] ?? ''}
                   onChange={e => updateFilter(activeTab, fm.key, e.target.value)}
                 />
@@ -506,7 +523,7 @@ export default function AdminPage() {
                   </span>
                 </TableHead>
               ))}
-              <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">Aktionen</TableHead>
+              <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">{t('actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -526,16 +543,16 @@ export default function AdminPage() {
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                           val ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
                         }`}>
-                          {val ? 'Ja' : 'Nein'}
+                          {val ? t('yes') : t('no')}
                         </span>
                       </TableCell>
                     );
                   }
                   if (fm.type === 'lookup/select' || fm.type === 'lookup/radio') {
-                    return <TableCell key={fm.key}><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{val?.label ?? '—'}</span></TableCell>;
+                    return <TableCell key={fm.key}><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{lookupLabel(activeTab, fm.key, val?.key) ?? val?.label ?? '—'}</span></TableCell>;
                   }
                   if (fm.type.startsWith('multiplelookup')) {
-                    return <TableCell key={fm.key}>{Array.isArray(val) ? val.map((v: any) => v?.label ?? v).join(', ') : '—'}</TableCell>;
+                    return <TableCell key={fm.key}>{Array.isArray(val) ? val.map((v: any) => lookupLabel(activeTab, fm.key, v?.key) ?? v?.label ?? v).join(', ') : '—'}</TableCell>;
                   }
                   if (fm.type.startsWith('multipleapplookup')) {
                     return (
@@ -596,7 +613,7 @@ export default function AdminPage() {
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={fieldMeta.length + 2} className="text-center py-16 text-muted-foreground">
-                  Keine Ergebnisse gefunden.
+                  {t('no_results')}
                 </TableCell>
               </TableRow>
             )}
@@ -615,6 +632,16 @@ export default function AdminPage() {
           enablePhotoLocation={AI_PHOTO_LOCATION['Veranstaltungen']}
         />
       )}
+      {(createEntity === 'veranstalter' || dialogState?.entity === 'veranstalter') && (
+        <VeranstalterDialog
+          open={createEntity === 'veranstalter' || dialogState?.entity === 'veranstalter'}
+          onClose={() => { setCreateEntity(null); setDialogState(null); }}
+          onSubmit={dialogState?.entity === 'veranstalter' ? handleUpdate : (fields: any) => handleCreate('veranstalter', fields)}
+          defaultValues={dialogState?.entity === 'veranstalter' ? dialogState.record?.fields : undefined}
+          enablePhotoScan={AI_PHOTO_SCAN['Veranstalter']}
+          enablePhotoLocation={AI_PHOTO_LOCATION['Veranstalter']}
+        />
+      )}
       {(createEntity === 'anmeldungen' || dialogState?.entity === 'anmeldungen') && (
         <AnmeldungenDialog
           open={createEntity === 'anmeldungen' || dialogState?.entity === 'anmeldungen'}
@@ -626,16 +653,6 @@ export default function AdminPage() {
           enablePhotoLocation={AI_PHOTO_LOCATION['Anmeldungen']}
         />
       )}
-      {(createEntity === 'veranstalter' || dialogState?.entity === 'veranstalter') && (
-        <VeranstalterDialog
-          open={createEntity === 'veranstalter' || dialogState?.entity === 'veranstalter'}
-          onClose={() => { setCreateEntity(null); setDialogState(null); }}
-          onSubmit={dialogState?.entity === 'veranstalter' ? handleUpdate : (fields: any) => handleCreate('veranstalter', fields)}
-          defaultValues={dialogState?.entity === 'veranstalter' ? dialogState.record?.fields : undefined}
-          enablePhotoScan={AI_PHOTO_SCAN['Veranstalter']}
-          enablePhotoLocation={AI_PHOTO_LOCATION['Veranstalter']}
-        />
-      )}
       {viewState?.entity === 'veranstaltungen' && (
         <VeranstaltungenViewDialog
           open={viewState?.entity === 'veranstaltungen'}
@@ -645,6 +662,14 @@ export default function AdminPage() {
           veranstalterList={(data as any).veranstalter ?? []}
         />
       )}
+      {viewState?.entity === 'veranstalter' && (
+        <VeranstalterViewDialog
+          open={viewState?.entity === 'veranstalter'}
+          onClose={() => setViewState(null)}
+          record={viewState?.record}
+          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'veranstalter', record: r }); }}
+        />
+      )}
       {viewState?.entity === 'anmeldungen' && (
         <AnmeldungenViewDialog
           open={viewState?.entity === 'anmeldungen'}
@@ -652,14 +677,6 @@ export default function AdminPage() {
           record={viewState?.record}
           onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'anmeldungen', record: r }); }}
           veranstaltungenList={(data as any).veranstaltungen ?? []}
-        />
-      )}
-      {viewState?.entity === 'veranstalter' && (
-        <VeranstalterViewDialog
-          open={viewState?.entity === 'veranstalter'}
-          onClose={() => setViewState(null)}
-          record={viewState?.record}
-          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'veranstalter', record: r }); }}
         />
       )}
 
@@ -677,8 +694,8 @@ export default function AdminPage() {
         open={!!deleteTargets}
         onClose={() => setDeleteTargets(null)}
         onConfirm={handleBulkDelete}
-        title="Ausgewählte löschen"
-        description={`Sollen ${deleteTargets?.ids.length ?? 0} Einträge wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.`}
+        title={t('bulk_delete')}
+        description={t('confirm_bulk_delete', { n: deleteTargets?.ids.length ?? 0 })}
       />
     </PageShell>
   );

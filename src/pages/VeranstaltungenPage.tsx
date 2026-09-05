@@ -15,12 +15,12 @@ import { VeranstaltungenDialog } from '@/components/dialogs/VeranstaltungenDialo
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
+import { t, appLabel, fieldLabel, lookupLabel, dateFnsLocale, dateFormat } from '@/i18n';
 import { format, parseISO } from 'date-fns';
-import { de } from 'date-fns/locale';
 
 function formatDate(d?: string) {
   if (!d) return '—';
-  try { return format(parseISO(d), 'dd.MM.yyyy', { locale: de }); } catch { return d; }
+  try { return format(parseISO(d), dateFormat(), { locale: dateFnsLocale() }); } catch { return d; }
 }
 
 export default function VeranstaltungenPage() {
@@ -119,18 +119,18 @@ export default function VeranstaltungenPage() {
 
   return (
     <PageShell
-      title="Veranstaltungen"
-      subtitle={`${records.length} Veranstaltungen im System`}
+      title={appLabel('veranstaltungen')}
+      subtitle={`${records.length} ${t('in_system', { entity: appLabel('veranstaltungen') })}`}
       action={
         <Button onClick={() => setDialogOpen(true)} className="shrink-0 rounded-full shadow-sm">
-          <IconPlus className="h-4 w-4 mr-2" /> Hinzufügen
+          <IconPlus className="h-4 w-4 mr-2" /> {t('add')}
         </Button>
       }
     >
       <div className="relative w-full max-w-sm">
         <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Veranstaltungen suchen..."
+          placeholder={t('search_entity', { entity: appLabel('veranstaltungen') })}
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="pl-9"
@@ -142,101 +142,101 @@ export default function VeranstaltungenPage() {
             <TableRow className="border-b border-input">
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('veranstalter')}>
                 <span className="inline-flex items-center gap-1">
-                  Veranstalter (E-Mail-Adresse)
+                  {fieldLabel('veranstaltungen', 'veranstalter')}
                   {sortKey === 'veranstalter' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('titel')}>
                 <span className="inline-flex items-center gap-1">
-                  Titel der Veranstaltung
+                  {fieldLabel('veranstaltungen', 'titel')}
                   {sortKey === 'titel' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('beschreibung_veranstaltung')}>
                 <span className="inline-flex items-center gap-1">
-                  Beschreibung
+                  {fieldLabel('veranstaltungen', 'beschreibung_veranstaltung')}
                   {sortKey === 'beschreibung_veranstaltung' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('kategorie')}>
                 <span className="inline-flex items-center gap-1">
-                  Kategorie
+                  {fieldLabel('veranstaltungen', 'kategorie')}
                   {sortKey === 'kategorie' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('beginn')}>
                 <span className="inline-flex items-center gap-1">
-                  Beginn (Datum & Uhrzeit)
+                  {fieldLabel('veranstaltungen', 'beginn')}
                   {sortKey === 'beginn' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('ende')}>
                 <span className="inline-flex items-center gap-1">
-                  Ende (Datum & Uhrzeit)
+                  {fieldLabel('veranstaltungen', 'ende')}
                   {sortKey === 'ende' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('anmeldefrist')}>
                 <span className="inline-flex items-center gap-1">
-                  Anmeldefrist
+                  {fieldLabel('veranstaltungen', 'anmeldefrist')}
                   {sortKey === 'anmeldefrist' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('veranstaltungsort_name')}>
                 <span className="inline-flex items-center gap-1">
-                  Name des Veranstaltungsorts
+                  {fieldLabel('veranstaltungen', 'veranstaltungsort_name')}
                   {sortKey === 'veranstaltungsort_name' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('veranstaltungsort_strasse')}>
                 <span className="inline-flex items-center gap-1">
-                  Straße
+                  {fieldLabel('veranstaltungen', 'veranstaltungsort_strasse')}
                   {sortKey === 'veranstaltungsort_strasse' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('veranstaltungsort_hausnummer')}>
                 <span className="inline-flex items-center gap-1">
-                  Hausnummer
+                  {fieldLabel('veranstaltungen', 'veranstaltungsort_hausnummer')}
                   {sortKey === 'veranstaltungsort_hausnummer' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('veranstaltungsort_plz')}>
                 <span className="inline-flex items-center gap-1">
-                  Postleitzahl
+                  {fieldLabel('veranstaltungen', 'veranstaltungsort_plz')}
                   {sortKey === 'veranstaltungsort_plz' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('veranstaltungsort_ort')}>
                 <span className="inline-flex items-center gap-1">
-                  Ort
+                  {fieldLabel('veranstaltungen', 'veranstaltungsort_ort')}
                   {sortKey === 'veranstaltungsort_ort' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('veranstaltungsort_geo')}>
                 <span className="inline-flex items-center gap-1">
-                  Standort auf der Karte
+                  {fieldLabel('veranstaltungen', 'veranstaltungsort_geo')}
                   {sortKey === 'veranstaltungsort_geo' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('max_teilnehmer')}>
                 <span className="inline-flex items-center gap-1">
-                  Maximale Teilnehmerzahl
+                  {fieldLabel('veranstaltungen', 'max_teilnehmer')}
                   {sortKey === 'max_teilnehmer' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('kosten')}>
                 <span className="inline-flex items-center gap-1">
-                  Kosten / Eintritt
+                  {fieldLabel('veranstaltungen', 'kosten')}
                   {sortKey === 'kosten' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('flyer')}>
                 <span className="inline-flex items-center gap-1">
-                  Bild / Flyer
+                  {fieldLabel('veranstaltungen', 'flyer')}
                   {sortKey === 'flyer' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
-              <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">Aktionen</TableHead>
+              <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">{t('actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -245,7 +245,7 @@ export default function VeranstaltungenPage() {
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getVeranstalterDisplayName(record.fields.veranstalter)}</span></TableCell>
                 <TableCell className="font-medium">{record.fields.titel ?? '—'}</TableCell>
                 <TableCell className="max-w-xs"><span className="truncate block">{record.fields.beschreibung_veranstaltung ?? '—'}</span></TableCell>
-                <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{record.fields.kategorie?.label ?? '—'}</span></TableCell>
+                <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{lookupLabel('veranstaltungen', 'kategorie', record.fields.kategorie?.key) ?? record.fields.kategorie?.label ?? '—'}</span></TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(record.fields.beginn)}</TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(record.fields.ende)}</TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(record.fields.anmeldefrist)}</TableCell>
@@ -273,7 +273,7 @@ export default function VeranstaltungenPage() {
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={17} className="text-center py-16 text-muted-foreground">
-                  {search ? 'Keine Ergebnisse gefunden.' : 'Noch keine Veranstaltungen. Jetzt hinzufügen!'}
+                  {search ? t('no_results') : t('no_data_yet', { entity: appLabel('veranstaltungen') })}
                 </TableCell>
               </TableRow>
             )}
@@ -296,8 +296,8 @@ export default function VeranstaltungenPage() {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        title="Veranstaltungen löschen"
-        description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
+        title={t('delete_entity', { entity: appLabel('veranstaltungen') })}
+        description={t('confirm_delete_desc')}
       />
 
     </PageShell>
